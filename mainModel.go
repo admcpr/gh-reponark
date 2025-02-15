@@ -1,7 +1,6 @@
 package main
 
 import (
-	"gh-reponark/auth"
 	"gh-reponark/filters"
 	"gh-reponark/org"
 	"gh-reponark/shared"
@@ -19,7 +18,7 @@ type MainModel struct {
 
 func NewMainModel() MainModel {
 	stack := shared.ModelStack{}
-	stack.Push(auth.NewModel())
+	stack.Push(user.NewModel(0, 0))
 	// stack.Push(NewBoolModel("Is something true", false, 0, 0))
 	// stack.Push(NewDateModel("Date between", time.Now(), time.Now().Add(time.Hour*24*7), 0, 0))
 	// stack.Push(NewIntModel("Number between", 0, 100, 0, 0))
@@ -97,8 +96,6 @@ func (m *MainModel) Next(message shared.NextMessage) tea.Cmd {
 	head, _ := m.stack.Peek()
 
 	switch head.(type) {
-	case auth.Model:
-		newModel = user.NewModel(message.ModelData.(user.User), m.width-2, m.height-2)
 	case user.Model:
 		newModel = org.NewModel(message.ModelData.(string), m.width-2, m.height-2)
 	case org.Model:
