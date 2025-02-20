@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/v2/list"
 	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/cli/go-gh/v2"
 	"github.com/cli/go-gh/v2/pkg/api"
 	graphql "github.com/cli/shurcooL-graphql"
 )
@@ -99,12 +98,10 @@ func (m Model) SelectedOrg() org.Organisation {
 }
 
 func getUser() tea.Msg {
-	args := []string{"api", "user", "-q", ".login"}
-	stdOut, _, err := gh.Exec(args...)
+	login, err := getLogin()
 	if err != nil {
 		return AuthenticationErrorMsg{Err: err}
 	}
-	login := stdOut.String()
 
 	client, err := api.DefaultGraphQLClient()
 	if err != nil {
@@ -123,4 +120,19 @@ func getUser() tea.Msg {
 	}
 
 	return userQueryMsg(userQuery)
+}
+
+func getLogin() (string, error) {
+	client, err := api.DefaultRESTClient()
+	if err != nil {
+		return "", err
+	}
+	response := User{}
+
+	err = client.Get("user", &response)
+	if err != nil {
+		return "", err
+	}
+
+	return response.Login, nil
 }

@@ -19,7 +19,7 @@ type MainModel struct {
 func NewMainModel() MainModel {
 	stack := shared.ModelStack{}
 	stack.Push(user.NewModel(0, 0))
-	// stack.Push(NewBoolModel("Is something true", false, 0, 0))
+	// stack.Push(filters.NewBoolModel("Is something true", false, 0, 0))
 	// stack.Push(NewDateModel("Date between", time.Now(), time.Now().Add(time.Hour*24*7), 0, 0))
 	// stack.Push(NewIntModel("Number between", 0, 100, 0, 0))
 	// stack.Push(filters.NewModel(0, 0))
