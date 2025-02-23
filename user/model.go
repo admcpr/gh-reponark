@@ -13,16 +13,12 @@ import (
 )
 
 type AuthenticationErrorMsg struct{ Err error }
-
-// type AuthenticatedMsg struct{ login string }
-
 type ErrMsg struct{ Err error }
 type OrgListMsg struct{ Organisations []org.Organisation }
-type userQueryMsg Query
+type queryCompleteMsg Query
 
 type Model struct {
-	organisations []org.Organisation
-	// login          string
+	query          Query
 	User           User
 	SelectedOrgUrl string
 	orgList        list.Model
@@ -50,31 +46,41 @@ func (m Model) Init() (tea.Model, tea.Cmd) {
 	return m, getUser
 }
 
+func (m Model) GetOrganizationItems(query Query) []list.Item {
+	items := make([]list.Item, len(query.User.Organizations.Nodes))
+	for i, org := range m.query.User.Organizations.Nodes {
+		items[i] = shared.NewListItem(org.Login, org.Url)
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].FilterValue() < items[j].FilterValue()
+	})
+
+	return items
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	case OrgListMsg:
-		m.organisations = msg.Organisations
-		sort.Slice(m.organisations, func(i, j int) bool {
-			return m.organisations[i].Login < m.organisations[j].Login
-		})
-
-		items := make([]list.Item, len(m.organisations))
-		for i, org := range m.organisations {
-			items[i] = shared.NewListItem(org.Login, org.Url)
-		}
-
+	case queryCompleteMsg:
+		m.query = Query(msg)
+		items := m.GetOrganizationItems(m.query)
 		cmd = m.orgList.SetItems(items)
 
 		return m, cmd
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "enter":
-			selectedOrg := m.organisations[m.orgList.Index()].Login
-			cmd = func() tea.Msg {
-				return shared.NextMessage{ModelData: selectedOrg}
+			if item, ok := m.orgList.SelectedItem().(shared.ListItem); ok {
+				return m, func() tea.Msg {
+					return shared.NextMessage{ModelData: item.Title()}
+				}
 			}
+			// 	selectedOrg := m.organisations[m.orgList.Index()].Login
+			// 	cmd = func() tea.Msg {
+			// 		return shared.NextMessage{ModelData: selectedOrg}
+			// 	}
 			return m, cmd
 		default:
 			m.orgList, cmd = m.orgList.Update(msg)
@@ -91,10 +97,6 @@ func (m Model) View() string {
 	m.orgList.SetWidth(m.width)
 	m.orgList.SetHeight(m.height)
 	return shared.AppStyle.Render(m.orgList.View())
-}
-
-func (m Model) SelectedOrg() org.Organisation {
-	return m.organisations[m.orgList.Index()]
 }
 
 func getUser() tea.Msg {
@@ -119,7 +121,7 @@ func getUser() tea.Msg {
 		return ErrMsg{Err: err}
 	}
 
-	return userQueryMsg(userQuery)
+	return queryCompleteMsg(userQuery)
 }
 
 func getLogin() (string, error) {

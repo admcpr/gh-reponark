@@ -11,22 +11,11 @@ type Query struct {
 				Url  string
 			} `graphql:"nodes"`
 		} `graphql:"repositories(first: $first)"`
+		Organizations struct {
+			Nodes []struct {
+				Login string
+				Url   string
+			} `graphql:"nodes"`
+		} `graphql:"organizations(first: $first)"`
 	} `graphql:"user(login: $login)"`
 }
-
-// query {
-// 	user(login:"adam7") {
-// 	  login
-// 	  url
-// 	  repositories{
-// 		totalCount
-// 	  }
-// 	  organizations(first:100){
-// 		totalCount
-// 		nodes{
-// 		  login
-// 		  url
-// 		}
-// 	  }
-// 	}
-//   }
