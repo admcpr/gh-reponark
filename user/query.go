@@ -5,17 +5,13 @@ type Query struct {
 		Id           string
 		Login        string
 		Url          string
-		Repositories struct {
-			Nodes []struct {
-				Name string
-				Url  string
-			} `graphql:"nodes"`
-		} `graphql:"repositories(first: $first)"`
-		Organizations struct {
-			Nodes []struct {
-				Login string
-				Url   string
-			} `graphql:"nodes"`
-		} `graphql:"organizations(first: $first)"`
+		Repositories []struct {
+			Name string
+			Url  string
+		} `graphql:"repositories(first: $first) { nodes }"`
+		Organizations []struct {
+			Login string
+			Url   string
+		} `graphql:"organizations(first: $first) { nodes }"`
 	} `graphql:"user(login: $login)"`
 }
