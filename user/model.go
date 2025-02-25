@@ -47,8 +47,8 @@ func (m Model) Init() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) GetOrganizationItems(query Query) []list.Item {
-	items := make([]list.Item, len(query.User.Organizations))
-	for i, org := range m.query.User.Organizations {
+	items := make([]list.Item, len(query.User.Organizations.Nodes))
+	for i, org := range m.query.User.Organizations.Nodes {
 		items[i] = shared.NewListItem(org.Login, org.Url)
 	}
 
