@@ -3,7 +3,6 @@ package user
 import (
 	"sort"
 
-	"gh-reponark/org"
 	"gh-reponark/shared"
 
 	"github.com/charmbracelet/bubbles/v2/list"
@@ -14,7 +13,6 @@ import (
 
 type AuthenticationErrorMsg struct{ Err error }
 type ErrMsg struct{ Err error }
-type OrgListMsg struct{ Organisations []org.Organisation }
 type queryCompleteMsg Query
 
 type Model struct {
@@ -56,6 +54,11 @@ func (m Model) GetOrganizationItems(query Query) []list.Item {
 		return items[i].FilterValue() < items[j].FilterValue()
 	})
 
+	// Add the user to the top of the list
+	// They're not an organization but they also have repositories
+	userItem := shared.NewListItem(query.User.Login, query.User.Url)
+	items = append([]list.Item{userItem}, items...)
+
 	return items
 }
 
@@ -77,10 +80,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return shared.NextMessage{ModelData: item.Title()}
 				}
 			}
-			// 	selectedOrg := m.organisations[m.orgList.Index()].Login
-			// 	cmd = func() tea.Msg {
-			// 		return shared.NextMessage{ModelData: selectedOrg}
-			// 	}
 			return m, cmd
 		default:
 			m.orgList, cmd = m.orgList.Update(msg)

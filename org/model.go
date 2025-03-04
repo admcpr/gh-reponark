@@ -18,7 +18,7 @@ import (
 )
 
 type ApiErrorMsg struct{ Err error }
-type orgQueryMsg Query
+type orgQueryMsg OrgQuery
 type repoQueryMsg repo.Query
 
 type Model struct {
@@ -190,7 +190,7 @@ func getRepoList(login string) tea.Cmd {
 			return ApiErrorMsg{Err: err}
 		}
 
-		var organizationQuery = Query{}
+		var organizationQuery = OrgQuery{}
 
 		variables := map[string]interface{}{
 			"login": graphql.String(login),
