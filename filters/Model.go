@@ -89,7 +89,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func NewFilterModel(property Property, width, height int) tea.Model {
+func NewFilterModel(modelData interface{}, width, height int) tea.Model {
+	property := modelData.(Property)
+
 	switch property.Type {
 	case "bool":
 		return NewBoolModel(property.Name, false, width, height)

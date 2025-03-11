@@ -97,11 +97,11 @@ func (m *MainModel) Next(message shared.NextMessage) tea.Cmd {
 
 	switch head.(type) {
 	case user.Model:
-		newModel = org.NewModel(message.ModelData.(string), m.width-2, m.height-2)
+		newModel = org.NewModel(message.ModelData, m.width-2, m.height-2)
 	case org.Model:
 		newModel = filters.NewModel(m.width-2, m.height-2)
 	case filters.Model:
-		newModel = filters.NewFilterModel(message.ModelData.(filters.Property), m.width-2, m.height-2)
+		newModel = filters.NewFilterModel(message.ModelData, m.width-2, m.height-2)
 	}
 
 	newModel, cmd := newModel.Init()

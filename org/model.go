@@ -36,7 +36,8 @@ type Model struct {
 	progress progress.Model
 }
 
-func NewModel(title string, width, height int) *Model {
+func NewModel(modelData interface{}, width, height int) *Model {
+	title := modelData.(string)
 	return &Model{
 		Title:     title,
 		width:     width,
@@ -172,7 +173,6 @@ func getRepoDetails(owner string, name string) tea.Cmd {
 		variables := map[string]interface{}{
 			"owner": graphql.String(owner),
 			"name":  graphql.String(name),
-			// "first": graphql.Int(100),
 		}
 		err = client.Query("Repository", &repoQuery, variables)
 		if err != nil {
