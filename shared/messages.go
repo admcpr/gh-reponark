@@ -2,5 +2,5 @@ package shared
 
 import tea "github.com/charmbracelet/bubbletea/v2"
 
-type NextMessage struct{ ModelData interface{} }
-type PreviousMessage struct{ Message tea.Msg }
+type NextMsg[T any] struct{ ModelData T }
+type PreviousMsg struct{ Message tea.Msg }

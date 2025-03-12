@@ -52,7 +52,7 @@ func (m BoolModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.SendFilterMsg
 		case "esc":
 			return m, func() tea.Msg {
-				return shared.PreviousMessage{}
+				return shared.PreviousMsg{}
 			}
 		case "y", "Y":
 			m.Value = true
@@ -85,5 +85,5 @@ func (m *BoolModel) GetValue() bool {
 }
 
 func (m BoolModel) SendFilterMsg() tea.Msg {
-	return shared.PreviousMessage{Message: AddFilterMsg(NewBoolFilter(m.Name, m.GetValue()))}
+	return shared.PreviousMsg{Message: AddFilterMsg(NewBoolFilter(m.Name, m.GetValue()))}
 }

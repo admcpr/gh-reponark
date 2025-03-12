@@ -99,7 +99,7 @@ func (m DateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.SendAddFilterMsg
 		case "esc":
 			return m, func() tea.Msg {
-				return shared.PreviousMessage{}
+				return shared.PreviousMsg{}
 			}
 		case "tab":
 			if m.fromInput.Focused() {
@@ -166,5 +166,5 @@ func (m *DateModel) GetValue() (time.Time, time.Time, error) {
 func (m DateModel) SendAddFilterMsg() tea.Msg {
 	from, to, _ := m.GetValue()
 
-	return shared.PreviousMessage{Message: AddFilterMsg(NewDateFilter(m.Name, from, to))}
+	return shared.PreviousMsg{Message: AddFilterMsg(NewDateFilter(m.Name, from, to))}
 }

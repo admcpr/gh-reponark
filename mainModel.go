@@ -63,10 +63,10 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			cmd = m.UpdateChild(msg)
 		}
-	case shared.NextMessage:
+	case shared.NextMsg[any]:
 		cmd = m.Next(msg)
 		return m, cmd
-	case shared.PreviousMessage:
+	case shared.PreviousMsg:
 		cmd = m.Previous(msg)
 		return m, cmd
 	default:
@@ -91,7 +91,7 @@ func (m MainModel) View() string {
 	return borderStyle.Render(lipgloss.PlaceHorizontal(m.width-2, lipgloss.Left, child.View()))
 }
 
-func (m *MainModel) Next(message shared.NextMessage) tea.Cmd {
+func (m *MainModel) Next(message shared.NextMsg[any]) tea.Cmd {
 	var newModel tea.Model
 	head, _ := m.stack.Peek()
 
@@ -110,7 +110,7 @@ func (m *MainModel) Next(message shared.NextMessage) tea.Cmd {
 	return cmd
 }
 
-func (m *MainModel) Previous(message shared.PreviousMessage) tea.Cmd {
+func (m *MainModel) Previous(message shared.PreviousMsg) tea.Cmd {
 	_, err := m.stack.Pop()
 
 	if err != nil {

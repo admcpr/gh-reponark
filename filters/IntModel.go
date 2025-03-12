@@ -74,7 +74,7 @@ func (m IntModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.SendAddFilterMsg
 		case "esc":
 			return m, func() tea.Msg {
-				return shared.PreviousMessage{}
+				return shared.PreviousMsg{}
 			}
 		case "tab", "shift+tab":
 			if m.fromInput.Focused() {
@@ -118,5 +118,5 @@ func (m *IntModel) GetValue() (int, int) {
 
 func (m IntModel) SendAddFilterMsg() tea.Msg {
 	from, to := m.GetValue()
-	return shared.PreviousMessage{Message: AddFilterMsg(NewIntFilter(m.Name, from, to))}
+	return shared.PreviousMsg{Message: AddFilterMsg(NewIntFilter(m.Name, from, to))}
 }
