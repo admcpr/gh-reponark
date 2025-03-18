@@ -77,7 +77,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if item, ok := m.orgList.SelectedItem().(shared.ListItem); ok {
 				return m, func() tea.Msg {
-					return shared.NextMsg[string]{ModelData: item.Title()}
+					return shared.NextMsg{ModelData: item.Title()}
 				}
 			}
 			return m, cmd

@@ -120,7 +120,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "f":
 			return m, func() tea.Msg {
-				return shared.NextMsg[filters.FilterMap]{ModelData: m.filters}
+				return shared.NextMsg{ModelData: m.filters}
 			}
 		case "esc":
 			return m, func() tea.Msg {
@@ -206,5 +206,5 @@ func getRepoList(login string) tea.Cmd {
 }
 
 func handleNext() tea.Msg {
-	return shared.NextMsg[any]{}
+	return shared.NextMsg{}
 }

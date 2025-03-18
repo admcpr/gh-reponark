@@ -87,7 +87,7 @@ func (m FilterSearchModel) CurrentPropertySuggestion() (Property, bool) {
 
 func (m FilterSearchModel) SendNextMsg() tea.Msg {
 	property, _ := m.CurrentPropertySuggestion()
-	return shared.NextMsg[Property]{ModelData: property}
+	return shared.NextMsg{ModelData: property}
 }
 
 func getFilters() tea.Msg {
