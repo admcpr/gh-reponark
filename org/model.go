@@ -18,7 +18,7 @@ import (
 )
 
 type ApiErrorMsg struct{ Err error }
-type orgQueryMsg OrgQuery
+type orgQueryMsg Query
 type repoQueryMsg repo.Query
 
 type Model struct {
@@ -26,6 +26,7 @@ type Model struct {
 	repoCount int
 	repos     []repo.RepoConfig
 	filters   filters.FilterMap
+	isUser    bool
 
 	repoList  list.Model
 	repoModel repo.Model
@@ -37,9 +38,11 @@ type Model struct {
 }
 
 func NewModel(modelData interface{}, width, height int) *Model {
-	title := modelData.(string)
+	orgKey := modelData.(shared.OrgKey)
+
 	return &Model{
-		Title:     title,
+		Title:     orgKey.Name,
+		isUser:    orgKey.IsUser,
 		width:     width,
 		height:    height,
 		repoModel: repo.NewModel(width/2, height),
@@ -72,7 +75,7 @@ func (m *Model) populateRepoList() {
 }
 
 func (m Model) Init() (tea.Model, tea.Cmd) {
-	return m, getRepoList(m.Title)
+	return m, getRepoList(m.Title, m.isUser)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -80,9 +83,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case orgQueryMsg:
-		repos := msg.Organization.Repositories.Nodes
+		repos := msg.GetCommonFields().Repositories.Nodes
 		cmds := []tea.Cmd{m.progress.SetPercent(0.1)}
-		m.repoCount = len(msg.Organization.Repositories.Nodes)
+		m.repoCount = len(msg.GetCommonFields().Repositories.Nodes)
 		for _, repo := range repos {
 			cmds = append(cmds, getRepoDetails(m.Title, repo.Name))
 		}
@@ -183,25 +186,36 @@ func getRepoDetails(owner string, name string) tea.Cmd {
 	}
 }
 
-func getRepoList(login string) tea.Cmd {
+func getRepoList(login string, isUser bool) tea.Cmd {
 	return func() tea.Msg {
 		client, err := api.DefaultGraphQLClient()
 		if err != nil {
 			return ApiErrorMsg{Err: err}
 		}
 
-		var organizationQuery = OrgQuery{}
-
 		variables := map[string]interface{}{
 			"login": graphql.String(login),
 			"first": graphql.Int(100),
 		}
-		err = client.Query("OrganizationRepositories", &organizationQuery, variables)
+
+		query, err := queryRepositories(client, isUser, variables)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		return orgQueryMsg(organizationQuery)
+		return orgQueryMsg(query)
+	}
+}
+
+func queryRepositories(client *api.GraphQLClient, isUser bool, variables map[string]interface{}) (Query, error) {
+	if isUser {
+		query := UserQuery{}
+		err := client.Query("UserRepositories", &query, variables)
+		return query, err
+	} else {
+		query := OrgQuery{}
+		err := client.Query("OrganizationRepositories", &query, variables)
+		return query, err
 	}
 }
 

@@ -17,7 +17,6 @@ type queryCompleteMsg Query
 
 type Model struct {
 	query          Query
-	User           User
 	SelectedOrgUrl string
 	orgList        list.Model
 	width          int
@@ -68,6 +67,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case queryCompleteMsg:
 		m.query = Query(msg)
+
 		items := m.GetOrganizationItems(m.query)
 		cmd = m.orgList.SetItems(items)
 
@@ -77,7 +77,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if item, ok := m.orgList.SelectedItem().(shared.ListItem); ok {
 				return m, func() tea.Msg {
-					return shared.NextMsg{ModelData: item.Title()}
+					isUser := item.Title() == m.query.User.Login
+					orgKey := shared.OrgKey{
+						Name:   item.Title(),
+						IsUser: isUser,
+					}
+					return shared.NextMsg{ModelData: orgKey}
 				}
 			}
 			return m, cmd

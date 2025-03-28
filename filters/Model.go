@@ -39,7 +39,7 @@ type Property struct {
 	Type        string
 }
 
-func NewModel(width, height int) *Model {
+func NewModel(modelData interface{}, width, height int) *Model {
 	fsm := NewFilterSearchModel()
 	list := list.New([]list.Item{}, shared.SimpleItemDelegate{}, width, height-4)
 	repository := repo.Repository{}
