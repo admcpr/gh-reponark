@@ -16,17 +16,15 @@ type ErrMsg struct{ Err error }
 type queryCompleteMsg Query
 
 type Model struct {
-	query          Query
-	SelectedOrgUrl string
-	orgList        list.Model
-	width          int
-	height         int
+	login   string
+	orgList list.Model
+	width   int
+	height  int
 }
 
 func NewModel(width, height int) Model {
 	list := list.New([]list.Item{}, shared.DefaultDelegate, width, height)
 
-	// list.Title = "User: " + user.Name
 	list.SetStatusBarItemName("Organization", "Organizations")
 	list.Styles.Title = shared.TitleStyle
 	list.SetShowTitle(true)
@@ -43,9 +41,10 @@ func (m Model) Init() (tea.Model, tea.Cmd) {
 	return m, getUser
 }
 
-func (m Model) GetOrganizationItems(query Query) []list.Item {
+func (m *Model) SetorgList(query Query) {
+	m.login = query.User.Login
 	items := make([]list.Item, len(query.User.Organizations.Nodes))
-	for i, org := range m.query.User.Organizations.Nodes {
+	for i, org := range query.User.Organizations.Nodes {
 		items[i] = shared.NewListItem(org.Login, org.Url)
 	}
 
@@ -55,10 +54,11 @@ func (m Model) GetOrganizationItems(query Query) []list.Item {
 
 	// Add the user to the top of the list
 	// They're not an organization but they also have repositories
-	userItem := shared.NewListItem(query.User.Login, query.User.Url)
+	userItem := shared.NewListItem(m.login, query.User.Url)
 	items = append([]list.Item{userItem}, items...)
 
-	return items
+	m.orgList.Title = "User: " + m.login
+	m.orgList.SetItems(items)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -66,10 +66,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case queryCompleteMsg:
-		m.query = Query(msg)
-
-		items := m.GetOrganizationItems(m.query)
-		cmd = m.orgList.SetItems(items)
+		m.SetorgList(Query(msg))
 
 		return m, cmd
 	case tea.KeyPressMsg:
@@ -77,7 +74,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if item, ok := m.orgList.SelectedItem().(shared.ListItem); ok {
 				return m, func() tea.Msg {
-					isUser := item.Title() == m.query.User.Login
+					isUser := item.Title() == m.login
 					orgKey := shared.OrgKey{
 						Name:   item.Title(),
 						IsUser: isUser,
