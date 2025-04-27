@@ -110,7 +110,7 @@ func (m Model) View() string {
 
 	search := m.filterSearch.View()
 	help := m.help.View(m.keymap)
-	return lipgloss.JoinVertical(lipgloss.Left, filtersListView, search, help)
+	return lipgloss.JoinVertical(lipgloss.Left, search, filtersListView, help)
 	// }
 }
 
@@ -130,7 +130,7 @@ func NewFiltersList(filters map[string]Filter, width, height int) list.Model {
 
 	list := list.New(items, shared.SimpleItemDelegate{}, width, height-8)
 	list.Styles.Title = shared.TitleStyle
-	list.Title = "Filters"
+	list.Title = "Selected Filters"
 	list.SetShowHelp(false)
 	list.SetShowStatusBar(false)
 	list.SetShowTitle(true)

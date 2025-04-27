@@ -19,7 +19,7 @@ func NewFilterSearchModel() FilterSearchModel {
 	ti := textinput.New()
 	ti.Placeholder = "Type to search"
 	ti.Prompt = "Add filter: "
-	ti.PromptStyle = shared.PromptStyle.Width(len(ti.Prompt))
+	ti.PromptStyle = shared.PromptStyle.Width(len(ti.Prompt)).MarginLeft(2)
 	ti.Cursor.Style = shared.CursorStyle
 	ti.Focus()
 	ti.CharLimit = 50
@@ -68,7 +68,7 @@ func (m FilterSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m FilterSearchModel) View() string {
-	return lipgloss.JoinVertical(lipgloss.Left, m.textinput.View(), "\n", m.LookupDescription())
+	return lipgloss.JoinVertical(lipgloss.Left, m.textinput.View(), m.LookupDescription())
 }
 
 func (m FilterSearchModel) LookupDescription() string {
