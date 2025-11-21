@@ -17,7 +17,7 @@ func TestNewFilterDateModel(t *testing.T) {
 
 	t.Run("NewFilterDateModel", func(t *testing.T) {
 		m := NewDateModel(name, from, to, 60, 40)
-		assert.Equal(t, m.Name, name)
+		assert.Equal(t, m.Name(), name)
 		assert.Equal(t, m.fromInput.Placeholder, fromString)
 		assert.Equal(t, m.toInput.Placeholder, toString)
 	})
@@ -94,7 +94,7 @@ func TestFilterDateModel_GetValue(t *testing.T) {
 			m.fromInput.SetValue(tt.fromValue)
 			m.toInput.SetValue(tt.toValue)
 
-			gotFrom, gotTo, gotErr := m.GetValue()
+			gotFrom, gotTo, gotErr := m.Value()
 
 			assert.Equal(t, gotFrom, tt.wantFrom)
 			assert.Equal(t, gotTo, tt.wantTo)

@@ -15,7 +15,7 @@ import (
 )
 
 type DateModel struct {
-	Name      string
+	name      string
 	fromInput textinput.Model
 	toInput   textinput.Model
 	width     int
@@ -70,7 +70,7 @@ func NewDateInputModel(prompt string, value time.Time) textinput.Model {
 
 func NewDateModel(name string, from, to time.Time, width, height int) DateModel {
 	m := DateModel{
-		Name:      name,
+		name:      name,
 		fromInput: NewDateInputModel("From", from),
 		toInput:   NewDateInputModel("To", to),
 	}
@@ -130,7 +130,7 @@ func (m DateModel) View() string {
 		errorText = "\n" + shared.ErrorStyle.Render(m.toInput.Err.Error())
 	}
 	inputs := lipgloss.JoinVertical(lipgloss.Left, m.fromInput.View(), m.toInput.View(), errorText)
-	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(m.Name), inputs)
+	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(m.name), inputs)
 
 	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))
 }
@@ -139,7 +139,7 @@ func (m *DateModel) Focus() tea.Cmd {
 	return m.fromInput.Focus()
 }
 
-func (m *DateModel) GetValue() (time.Time, time.Time, error) {
+func (m DateModel) Value() (time.Time, time.Time, error) {
 	fromError := m.fromInput.Validate(m.fromInput.Value())
 	if fromError != nil {
 		return time.Time{}, time.Time{}, fromError
@@ -164,7 +164,9 @@ func (m *DateModel) GetValue() (time.Time, time.Time, error) {
 }
 
 func (m DateModel) SendAddFilterMsg() tea.Msg {
-	from, to, _ := m.GetValue()
+	from, to, _ := m.Value()
 
-	return shared.PreviousMsg{Message: AddFilterMsg(NewDateFilter(m.Name, from, to))}
+	return shared.PreviousMsg{Message: AddFilterMsg(NewDateFilter(m.name, from, to))}
 }
+
+func (m DateModel) Name() string { return m.name }

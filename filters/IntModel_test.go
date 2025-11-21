@@ -23,7 +23,7 @@ func TestNewFilterIntModel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := NewIntModel(tt.name, tt.from, tt.to, 60, 40)
 
-			assert.Equal(t, m.Name, tt.name)
+			assert.Equal(t, m.Name(), tt.name)
 			assert.Equal(t, m.fromInput.Placeholder, fmt.Sprint(tt.from))
 			assert.Equal(t, m.toInput.Placeholder, fmt.Sprint(tt.to))
 		})

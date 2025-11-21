@@ -18,12 +18,12 @@ func (s *BoolFilterSuite) SetupTest() {
 
 func (s *BoolFilterSuite) TestNewBoolFilter() {
 	filter := NewBoolFilter("example", true)
-	s.Equal("example", filter.Name)
+	s.Equal("example", filter.Name())
 	s.True(filter.Value)
 }
 
 func (s *BoolFilterSuite) TestGetName() {
-	s.Equal("test", s.filter.GetName())
+	s.Equal("test", s.filter.Name())
 }
 
 func (s *BoolFilterSuite) TestMatches() {

@@ -9,16 +9,16 @@ import (
 )
 
 type BoolModel struct {
-	Name   string
-	Value  bool
+	name   string
+	value  bool
 	width  int
 	height int
 }
 
 func NewBoolModel(name string, value bool, width, height int) BoolModel {
 	m := BoolModel{
-		Name:  name,
-		Value: value,
+		name:  name,
+		value: value,
 	}
 
 	m.width = width
@@ -49,17 +49,17 @@ func (m BoolModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "enter":
-			return m, m.SendFilterMsg
+			return m, m.SendAddFilterMsg
 		case "esc":
 			return m, func() tea.Msg {
 				return shared.PreviousMsg{}
 			}
 		case "y", "Y":
-			m.Value = true
+			m.value = true
 		case "n", "N":
-			m.Value = false
+			m.value = false
 		case "right", "left":
-			m.Value = !m.Value
+			m.value = !m.value
 		}
 	}
 
@@ -69,21 +69,25 @@ func (m BoolModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m BoolModel) View() string {
 	yesButtonStyle := shared.ButtonStyle
 	noButtonStyle := shared.ButtonStyle
-	if m.Value {
+	if m.value {
 		yesButtonStyle = shared.ActiveButtonStyle
 	} else {
 		noButtonStyle = shared.ActiveButtonStyle
 	}
 	buttons := lipgloss.JoinHorizontal(lipgloss.Left, yesButtonStyle.Render("Yes"), noButtonStyle.Render("No"))
-	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(m.Name), buttons)
+	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(m.name), buttons)
 
 	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))
 }
 
-func (m *BoolModel) GetValue() bool {
-	return m.Value
+func (m BoolModel) Value() bool {
+	return m.value
 }
 
-func (m BoolModel) SendFilterMsg() tea.Msg {
-	return shared.PreviousMsg{Message: AddFilterMsg(NewBoolFilter(m.Name, m.GetValue()))}
+func (m BoolModel) Name() string {
+	return m.name
+}
+
+func (m BoolModel) SendAddFilterMsg() tea.Msg {
+	return shared.PreviousMsg{Message: AddFilterMsg(NewBoolFilter(m.name, m.Value()))}
 }

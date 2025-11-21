@@ -21,12 +21,12 @@ func TestNewFilterBoolModel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := NewBoolModel(tt.name, tt.value, 60, 40)
 
-			if m.Name != tt.name {
-				t.Errorf("got %q, want %q", m.Name, tt.name)
+			if m.Name() != tt.name {
+				t.Errorf("got %q, want %q", m.Name(), tt.name)
 			}
 
-			if m.Value != tt.value {
-				t.Errorf("got %t, want %t", m.Value, tt.value)
+			if m.Value() != tt.value {
+				t.Errorf("got %t, want %t", m.Value(), tt.value)
 			}
 		})
 	}
@@ -55,10 +55,10 @@ func TestFilterBoolModel_Update(t *testing.T) {
 			m, _ := tt.model.Update(keyReleaseMsg)
 
 			filterBooleanModel, _ := m.(BoolModel)
-			got := filterBooleanModel.GetValue()
+			got := filterBooleanModel.Value()
 
 			if got != tt.want {
-				t.Errorf("FilterBooleanModel.GetValue() = %v, want %v", got, tt.want)
+				t.Errorf("FilterBooleanModel.Value() = %v, want %v", got, tt.want)
 			}
 		})
 	}

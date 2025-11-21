@@ -5,7 +5,7 @@ import (
 )
 
 type Filter interface {
-	GetName() string
+	Name() string
 	Matches(property repo.RepoProperty) bool
 	String() string
 }

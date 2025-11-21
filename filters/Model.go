@@ -78,7 +78,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case AddFilterMsg:
-		m.filters[msg.GetName()] = Filter(msg)
+		m.filters[msg.Name()] = Filter(msg)
 		m.filterSearch = NewFilterSearchModel()
 		m.filterSearch, cmd = m.filterSearch.Init()
 		return m, cmd
@@ -120,7 +120,7 @@ func NewFiltersList(filters map[string]Filter, width, height int) list.Model {
 	items := make([]list.Item, len(filters))
 	i := 0
 	for _, filter := range filters {
-		items[i] = shared.SimpleItem(filter.GetName())
+		items[i] = shared.SimpleItem(filter.Name())
 		i++
 	}
 

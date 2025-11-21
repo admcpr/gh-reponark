@@ -6,17 +6,17 @@ import (
 )
 
 type IntFilter struct {
-	Name string
+	name string
 	From int
 	To   int
 }
 
 func NewIntFilter(name string, from, to int) IntFilter {
-	return IntFilter{Name: name, From: from, To: to}
+	return IntFilter{name: name, From: from, To: to}
 }
 
-func (f IntFilter) GetName() string {
-	return f.Name
+func (f IntFilter) Name() string {
+	return f.name
 }
 
 func (f IntFilter) Matches(property repo.RepoProperty) bool {
@@ -30,5 +30,5 @@ func (f IntFilter) Matches(property repo.RepoProperty) bool {
 }
 
 func (f IntFilter) String() string {
-	return fmt.Sprintf("%s between %d and %d", f.Name, f.From, f.To)
+	return fmt.Sprintf("%s between %d and %d", f.name, f.From, f.To)
 }

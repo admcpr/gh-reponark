@@ -118,10 +118,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "F", "f":
-			return m, handleNext
-		}
-		switch msg.String() {
-		case "f":
 			return m, func() tea.Msg {
 				return shared.NextMsg{ModelData: m.filters}
 			}
@@ -217,8 +213,4 @@ func queryRepositories(client *api.GraphQLClient, isUser bool, variables map[str
 		err := client.Query("OrganizationRepositories", &query, variables)
 		return query, err
 	}
-}
-
-func handleNext() tea.Msg {
-	return shared.NextMsg{}
 }

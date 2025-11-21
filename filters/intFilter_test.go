@@ -18,13 +18,13 @@ func (s *IntFilterSuite) SetupTest() {
 
 func (s *IntFilterSuite) TestNewIntFilter() {
 	filter := NewIntFilter("stars", 0, 1000)
-	s.Equal("stars", filter.Name)
+	s.Equal("stars", filter.Name())
 	s.Equal(0, filter.From)
 	s.Equal(1000, filter.To)
 }
 
 func (s *IntFilterSuite) TestGetName() {
-	s.Equal("test", s.filter.GetName())
+	s.Equal("test", s.filter.Name())
 }
 
 func (s *IntFilterSuite) TestMatches() {

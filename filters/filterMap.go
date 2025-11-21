@@ -6,8 +6,8 @@ import (
 
 type FilterMap map[string]Filter
 
-func (FilterMap *FilterMap) FilterRepos(repoConfigs []repo.RepoConfig) []repo.RepoConfig {
-	if FilterMap == nil {
+func (fm FilterMap) FilterRepos(repoConfigs []repo.RepoConfig) []repo.RepoConfig {
+	if fm == nil {
 		return repoConfigs
 	}
 
@@ -15,8 +15,8 @@ func (FilterMap *FilterMap) FilterRepos(repoConfigs []repo.RepoConfig) []repo.Re
 
 	for _, repo := range repoConfigs {
 		matches := true
-		for _, filter := range *FilterMap {
-			if !filter.Matches(repo.Properties[filter.GetName()]) {
+		for _, filter := range fm {
+			if !filter.Matches(repo.Properties[filter.Name()]) {
 				matches = false
 				break
 			}

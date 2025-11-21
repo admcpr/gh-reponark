@@ -11,7 +11,7 @@ import (
 )
 
 type IntModel struct {
-	Name      string
+	name      string
 	fromInput textinput.Model
 	toInput   textinput.Model
 	width     int
@@ -46,7 +46,7 @@ func newIntInputModel(prompt string, value int) textinput.Model {
 
 func NewIntModel(title string, from, to, width, height int) IntModel {
 	m := IntModel{
-		Name:      title,
+		name:      title,
 		fromInput: newIntInputModel("From", from),
 		toInput:   newIntInputModel("To", to),
 	}
@@ -104,19 +104,23 @@ func (m IntModel) View() string {
 	if m.toInput.Err != nil {
 		errorText = "\n" + shared.ErrorStyle.Render(m.toInput.Err.Error())
 	}
-	title := fmt.Sprintf("%s - w: %d h: %d", m.Name, m.width, m.height)
+	title := fmt.Sprintf("%s - w: %d h: %d", m.name, m.width, m.height)
 	inputs := lipgloss.JoinVertical(lipgloss.Left, m.fromInput.View(), m.toInput.View())
 	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(title), inputs, errorText)
 	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))
 }
 
-func (m *IntModel) GetValue() (int, int) {
+func (m IntModel) Value() (int, int) {
 	from, _ := strconv.Atoi(m.fromInput.Value())
 	to, _ := strconv.Atoi(m.toInput.Value())
 	return from, to
 }
 
 func (m IntModel) SendAddFilterMsg() tea.Msg {
-	from, to := m.GetValue()
-	return shared.PreviousMsg{Message: AddFilterMsg(NewIntFilter(m.Name, from, to))}
+	from, to := m.Value()
+	return shared.PreviousMsg{Message: AddFilterMsg(NewIntFilter(m.name, from, to))}
+}
+
+func (m IntModel) Name() string {
+	return m.name
 }
