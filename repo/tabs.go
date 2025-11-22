@@ -3,7 +3,7 @@ package repo
 import (
 	"gh-reponark/shared"
 
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func RenderTabs(tabs []string, width, activeTab int) string {

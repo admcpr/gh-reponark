@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea/v2"
+	tea "charm.land/bubbletea/v2"
 )
 
 func main() {
 	mainModel := NewMainModel()
-	// p := tea.NewProgram(mainModel, tea.WithKeyboardEnhancements(), tea.WithAltScreen())
-	p := tea.NewProgram(mainModel, tea.WithAltScreen())
+	// p := tea.NewProgram(mainModel, tea.WithKeyboardEnhancements())
+	p := tea.NewProgram(mainModel)
 
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)

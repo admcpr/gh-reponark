@@ -3,7 +3,7 @@ package shared
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea/v2"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -11,16 +11,16 @@ type mockModel struct {
 	state string
 }
 
-func (m mockModel) Init() (tea.Model, tea.Cmd) {
-	return m, nil
+func (m mockModel) Init() tea.Cmd {
+	return nil
 }
 
 func (m mockModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m mockModel) View() string {
-	return ""
+func (m mockModel) View() tea.View {
+	return tea.NewView("")
 }
 
 func (m mockModel) SetDimensions(width, height int) {

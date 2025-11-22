@@ -1,11 +1,12 @@
 package filters
 
 import (
+	"fmt"
 	"gh-reponark/shared"
 
-	"github.com/charmbracelet/bubbles/v2/textinput"
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type BoolModel struct {
@@ -37,8 +38,8 @@ func (m *BoolModel) SetDimensions(width, height int) {
 	m.height = height
 }
 
-func (m BoolModel) Init() (tea.Model, tea.Cmd) {
-	return m, textinput.Blink
+func (m BoolModel) Init() tea.Cmd {
+	return textinput.Blink
 }
 
 func (m BoolModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -66,7 +67,7 @@ func (m BoolModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m BoolModel) View() string {
+func (m BoolModel) View() tea.View {
 	yesButtonStyle := shared.ButtonStyle
 	noButtonStyle := shared.ButtonStyle
 	if m.value {
@@ -77,7 +78,7 @@ func (m BoolModel) View() string {
 	buttons := lipgloss.JoinHorizontal(lipgloss.Left, yesButtonStyle.Render("Yes"), noButtonStyle.Render("No"))
 	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(m.name), buttons)
 
-	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))
+	return tea.NewView(fmt.Sprint(lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))))
 }
 
 func (m BoolModel) Value() bool {

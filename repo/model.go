@@ -1,12 +1,13 @@
 package repo
 
 import (
+	"fmt"
 	"gh-reponark/shared"
 	"sort"
 
-	"github.com/charmbracelet/bubbles/v2/list"
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type Model struct {
@@ -33,8 +34,8 @@ func (m *Model) SetDimensions(width, height int) {
 	m.repoHeader.SetDimensions(width, height)
 }
 
-func (m Model) Init() (tea.Model, tea.Cmd) {
-	return m, nil
+func (m Model) Init() tea.Cmd {
+	return nil
 }
 
 func (m *Model) SelectRepo(repository RepoConfig) {
@@ -77,7 +78,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	// frameWidth, frameHeight := style.Settings.GetFrameSize()
 	// settings := appStyle.
 	// 	Width(m.width).
@@ -85,7 +86,7 @@ func (m Model) View() string {
 
 	settings := m.settingsList.View()
 
-	return lipgloss.JoinVertical(lipgloss.Left, settings)
+	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, settings)))
 }
 
 func NewSettingsList(activeSettings []RepoProperty, title string, width, height int) list.Model {

@@ -1,12 +1,13 @@
 package user
 
 import (
+	"fmt"
 	"sort"
 
 	"gh-reponark/shared"
 
-	"github.com/charmbracelet/bubbles/v2/list"
-	tea "github.com/charmbracelet/bubbletea/v2"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 	"github.com/cli/go-gh/v2/pkg/api"
 	graphql "github.com/cli/shurcooL-graphql"
 )
@@ -37,8 +38,8 @@ func (m *Model) SetDimensions(width, height int) {
 	m.height = height
 }
 
-func (m Model) Init() (tea.Model, tea.Cmd) {
-	return m, getUser
+func (m Model) Init() tea.Cmd {
+	return getUser
 }
 
 func (m *Model) SetorgList(query Query) {
@@ -94,10 +95,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	m.orgList.SetWidth(m.width)
 	m.orgList.SetHeight(m.height)
-	return shared.AppStyle.Render(m.orgList.View())
+	return tea.NewView(fmt.Sprint(shared.AppStyle.Render(m.orgList.View())))
 }
 
 func getUser() tea.Msg {

@@ -1,11 +1,12 @@
 package repo
 
 import (
+	"fmt"
 	"gh-reponark/shared"
 
-	"github.com/charmbracelet/bubbles/v2/paginator"
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/bubbles/v2/paginator"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type TabSelectMessage struct{ Index int }
@@ -36,15 +37,15 @@ func (m *HeaderModel) SetDimensions(width, height int) {
 	m.height = height
 }
 
-func (m HeaderModel) Init() (tea.Model, tea.Cmd) {
-	return m, nil
+func (m HeaderModel) Init() tea.Cmd {
+	return nil
 }
 
 func (m HeaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m HeaderModel) View() string {
+func (m HeaderModel) View() tea.View {
 	heading := shared.TitleStyle.Render(m.titles[m.paginator.Page])
-	return lipgloss.JoinVertical(lipgloss.Left, heading+"\n"+m.paginator.View())
+	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, heading+"\n"+m.paginator.View())))
 }

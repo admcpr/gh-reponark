@@ -5,9 +5,10 @@ import (
 	"gh-reponark/org"
 	"gh-reponark/shared"
 	"gh-reponark/user"
+	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type MainModel struct {
@@ -36,10 +37,9 @@ func (m *MainModel) SetDimensions(width, height int) {
 	m.stack.SetDimensions(width-2, height-2)
 }
 
-func (m MainModel) Init() (tea.Model, tea.Cmd) {
+func (m MainModel) Init() tea.Cmd {
 	child, _ := m.stack.Peek()
-	_, cmd := child.Init()
-	return m, cmd
+	return child.Init()
 }
 
 func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -84,11 +84,12 @@ func (m *MainModel) UpdateChild(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (m MainModel) View() string {
+func (m MainModel) View() tea.View {
 	child, _ := m.stack.Peek()
 	borderStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(shared.AppColors.Green)
-
-	return borderStyle.Render(lipgloss.PlaceHorizontal(m.width-2, lipgloss.Left, child.View()))
+	v := tea.NewView(borderStyle.Render(lipgloss.PlaceHorizontal(m.width-2, lipgloss.Left, fmt.Sprint(child.View()))))
+	v.AltScreen = true
+	return v
 }
 
 func (m *MainModel) Next(message shared.NextMsg) tea.Cmd {
@@ -104,7 +105,7 @@ func (m *MainModel) Next(message shared.NextMsg) tea.Cmd {
 		newModel = filters.NewFilterModel(message.ModelData, m.width-2, m.height-2)
 	}
 
-	newModel, cmd := newModel.Init()
+	cmd := newModel.Init()
 	m.stack.Push(newModel)
 
 	return cmd

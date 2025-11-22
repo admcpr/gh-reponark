@@ -1,16 +1,17 @@
 package filters
 
 import (
+	"fmt"
 	"gh-reponark/repo"
 	"gh-reponark/shared"
 	"sort"
 	"time"
 
-	"github.com/charmbracelet/bubbles/v2/help"
-	"github.com/charmbracelet/bubbles/v2/key"
-	"github.com/charmbracelet/bubbles/v2/list"
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type AddFilterMsg Filter
@@ -60,9 +61,8 @@ func NewModel(modelData interface{}, width, height int) *Model {
 	}
 }
 
-func (m Model) Init() (tea.Model, tea.Cmd) {
-	_, cmd := m.filterSearch.Init()
-	return m, cmd
+func (m Model) Init() tea.Cmd {
+	return m.filterSearch.Init()
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -80,7 +80,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case AddFilterMsg:
 		m.filters[msg.Name()] = Filter(msg)
 		m.filterSearch = NewFilterSearchModel()
-		m.filterSearch, cmd = m.filterSearch.Init()
+		cmd := m.filterSearch.Init()
 		return m, cmd
 	}
 
@@ -104,13 +104,13 @@ func NewFilterModel(modelData interface{}, width, height int) tea.Model {
 	}
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	m.filtersList = NewFiltersList(m.filters, m.width, m.height)
 	filtersListView := m.filtersList.View()
 
-	search := m.filterSearch.View()
+	search := fmt.Sprint(m.filterSearch.View())
 	help := m.help.View(m.keymap)
-	return lipgloss.JoinVertical(lipgloss.Left, search, filtersListView, help)
+	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, search, filtersListView, help)))
 	// }
 }
 
