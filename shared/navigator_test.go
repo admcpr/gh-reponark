@@ -14,8 +14,6 @@ func (m *stubModel) Init() tea.Cmd                           { return nil }
 func (m *stubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return m, nil }
 func (m *stubModel) View() tea.View                          { return tea.NewView("") }
 
-func allowAll(current, next tea.Model) error { return nil }
-
 func TestNavigator_PushAndCurrent(t *testing.T) {
 	nav := NewNavigator()
 
