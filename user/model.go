@@ -42,7 +42,7 @@ func (m Model) Init() tea.Cmd {
 	return getUser
 }
 
-func (m *Model) SetorgList(query Query) {
+func (m *Model) SetOrgList(query Query) {
 	m.login = query.User.Login
 	items := make([]list.Item, len(query.User.Organizations.Nodes))
 	for i, org := range query.User.Organizations.Nodes {
@@ -67,7 +67,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case queryCompleteMsg:
-		m.SetorgList(Query(msg))
+		m.SetOrgList(Query(msg))
 
 		return m, cmd
 	case tea.KeyPressMsg:

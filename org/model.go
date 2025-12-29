@@ -140,10 +140,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) View() tea.View {
+func (m *Model) View() tea.View {
 	if m.progress.Percent() < 1 {
 		return m.ProgressView()
 	}
+
+	if len(m.repos) == 0 || m.repoList.Index() < 0 || m.repoList.Index() >= len(m.repos) {
+		repoList := shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoList.View())
+		empty := shared.AppStyle.Width(shared.Half(m.width)).Render("No repositories found")
+		return tea.NewView(fmt.Sprint(lipgloss.JoinHorizontal(lipgloss.Top, repoList, empty)))
+	}
+
 	m.repoModel.SelectRepo(m.repos[m.repoList.Index()])
 
 	var repoList = shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoList.View())
@@ -155,7 +162,7 @@ func (m Model) View() tea.View {
 	return tea.NewView(fmt.Sprint(lipgloss.JoinHorizontal(lipgloss.Top, views...)))
 }
 
-func (m Model) ProgressView() tea.View {
+func (m *Model) ProgressView() tea.View {
 	m.progress.SetWidth(m.width)
 	text := fmt.Sprintf("Getting repositories ... %d of %d\n", len(m.repos), m.repoCount)
 	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Center, text, m.progress.View())))

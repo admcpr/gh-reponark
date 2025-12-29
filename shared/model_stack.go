@@ -39,6 +39,22 @@ func (s *ModelStack) Push(element tea.Model) {
 	s.elements = append(s.elements, element)
 }
 
+// ReplaceTop swaps the element at the top of the stack.
+func (s *ModelStack) ReplaceTop(element tea.Model) error {
+	if len(s.elements) == 0 {
+		return errors.New("stack is empty")
+	}
+	if element == nil {
+		return errors.New("ModelStack cannot replace with nil model")
+	}
+	if reflect.ValueOf(element).Kind() != reflect.Ptr {
+		return fmt.Errorf("ModelStack requires pointer models, got %T", element)
+	}
+
+	s.elements[len(s.elements)-1] = element
+	return nil
+}
+
 // Pop removes and returns the top element of the stack
 func (s *ModelStack) Pop() (tea.Model, error) {
 	if len(s.elements) == 0 {
@@ -56,6 +72,14 @@ func (s *ModelStack) Peek() (tea.Model, error) {
 	}
 	element := s.elements[len(s.elements)-1]
 	return element, nil
+}
+
+// PeekBelowTop returns the element directly below the top of the stack.
+func (s *ModelStack) PeekBelowTop() (tea.Model, error) {
+	if len(s.elements) < 2 {
+		return nil, errors.New("stack has fewer than 2 elements")
+	}
+	return s.elements[len(s.elements)-2], nil
 }
 
 func (s *ModelStack) Len() int {

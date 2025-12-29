@@ -56,11 +56,13 @@ func (n *Navigator) ReplaceCurrent(m tea.Model) error {
 		return fmt.Errorf("navigator is empty")
 	}
 	if n.validate != nil && n.stack.Len() > 1 {
-		prev := n.stack.elements[n.stack.Len()-2]
+		prev, err := n.stack.PeekBelowTop()
+		if err != nil {
+			return err
+		}
 		if err := n.validate(prev, m); err != nil {
 			return err
 		}
 	}
-	n.stack.elements[n.stack.Len()-1] = m
-	return nil
+	return n.stack.ReplaceTop(m)
 }
