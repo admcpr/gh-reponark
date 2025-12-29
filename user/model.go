@@ -62,7 +62,7 @@ func (m *Model) SetorgList(query Query) {
 	m.orgList.SetItems(items)
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {

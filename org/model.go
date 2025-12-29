@@ -74,11 +74,11 @@ func (m *Model) populateRepoList() {
 	m.repoModel.SelectRepo(m.repos[m.repoList.Index()])
 }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return getRepoList(m.Title, m.isUser)
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {

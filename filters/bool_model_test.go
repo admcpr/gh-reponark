@@ -33,28 +33,26 @@ func TestNewFilterBoolModel(t *testing.T) {
 }
 
 func TestFilterBoolModel_Update(t *testing.T) {
-	trueModel := NewBoolModel("True", true, 60, 40)
-	falseModel := NewBoolModel("False", false, 60, 40)
-
 	tests := []struct {
-		model BoolModel
-		name  string
-		_rune rune
-		want  bool
+		name    string
+		initial bool
+		_rune   rune
+		want    bool
 	}{
-		{name: "'n' should set value to false", model: trueModel, _rune: 'n', want: false},
-		{name: "'N' should set value to false", model: trueModel, _rune: 'N', want: false},
-		{name: "'y' should set value to true", model: falseModel, _rune: 'y', want: true},
-		{name: "'Y' should set value to true", model: falseModel, _rune: 'Y', want: true},
-		{name: "'x' shouldn't change false value", model: falseModel, _rune: 'x', want: false},
-		{name: "'x' shouldn't change true value", model: trueModel, _rune: 'x', want: true},
+		{name: "'n' should set value to false", initial: true, _rune: 'n', want: false},
+		{name: "'N' should set value to false", initial: true, _rune: 'N', want: false},
+		{name: "'y' should set value to true", initial: false, _rune: 'y', want: true},
+		{name: "'Y' should set value to true", initial: false, _rune: 'Y', want: true},
+		{name: "'x' shouldn't change false value", initial: false, _rune: 'x', want: false},
+		{name: "'x' shouldn't change true value", initial: true, _rune: 'x', want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			model := NewBoolModel(tt.name, tt.initial, 60, 40)
 			keyReleaseMsg := tea.KeyPressMsg{Code: tt._rune}
-			m, _ := tt.model.Update(keyReleaseMsg)
+			m, _ := model.Update(keyReleaseMsg)
 
-			filterBooleanModel, _ := m.(BoolModel)
+			filterBooleanModel := m.(*BoolModel)
 			got := filterBooleanModel.Value()
 
 			if got != tt.want {

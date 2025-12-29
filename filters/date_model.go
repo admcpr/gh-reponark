@@ -73,8 +73,8 @@ func NewDateInputModel(prompt string, value time.Time) textinput.Model {
 	return m
 }
 
-func NewDateModel(name string, from, to time.Time, width, height int) DateModel {
-	m := DateModel{
+func NewDateModel(name string, from, to time.Time, width, height int) *DateModel {
+	m := &DateModel{
 		name:      name,
 		fromInput: NewDateInputModel("From", from),
 		toInput:   NewDateInputModel("To", to),
@@ -88,11 +88,11 @@ func NewDateModel(name string, from, to time.Time, width, height int) DateModel 
 	return m
 }
 
-func (m DateModel) Init() tea.Cmd {
+func (m *DateModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func (m DateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *DateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -126,7 +126,7 @@ func (m DateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m DateModel) View() tea.View {
+func (m *DateModel) View() tea.View {
 	errorText := ""
 	if m.fromInput.Err != nil {
 		errorText = "\n" + shared.ErrorStyle.Render(m.fromInput.Err.Error())
@@ -144,7 +144,7 @@ func (m *DateModel) Focus() tea.Cmd {
 	return m.fromInput.Focus()
 }
 
-func (m DateModel) Value() (time.Time, time.Time, error) {
+func (m *DateModel) Value() (time.Time, time.Time, error) {
 	fromError := m.fromInput.Validate(m.fromInput.Value())
 	if fromError != nil {
 		return time.Time{}, time.Time{}, fromError
@@ -168,10 +168,10 @@ func (m DateModel) Value() (time.Time, time.Time, error) {
 	return from, to, nil
 }
 
-func (m DateModel) SendAddFilterMsg() tea.Msg {
+func (m *DateModel) SendAddFilterMsg() tea.Msg {
 	from, to, _ := m.Value()
 
 	return shared.PreviousMsg{Message: AddFilterMsg(NewDateFilter(m.name, from, to))}
 }
 
-func (m DateModel) Name() string { return m.name }
+func (m *DateModel) Name() string { return m.name }

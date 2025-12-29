@@ -49,8 +49,8 @@ func newIntInputModel(prompt string, value int) textinput.Model {
 	return m
 }
 
-func NewIntModel(title string, from, to, width, height int) IntModel {
-	m := IntModel{
+func NewIntModel(title string, from, to, width, height int) *IntModel {
+	m := &IntModel{
 		name:      title,
 		fromInput: newIntInputModel("From", from),
 		toInput:   newIntInputModel("To", to),
@@ -64,11 +64,11 @@ func NewIntModel(title string, from, to, width, height int) IntModel {
 	return m
 }
 
-func (m IntModel) Init() tea.Cmd {
+func (m *IntModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func (m IntModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *IntModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -101,7 +101,7 @@ func (m IntModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m IntModel) View() tea.View {
+func (m *IntModel) View() tea.View {
 	errorText := ""
 	if m.fromInput.Err != nil {
 		errorText = "\n" + shared.ErrorStyle.Render(m.fromInput.Err.Error())
@@ -115,17 +115,17 @@ func (m IntModel) View() tea.View {
 	return tea.NewView(fmt.Sprint(lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))))
 }
 
-func (m IntModel) Value() (int, int) {
+func (m *IntModel) Value() (int, int) {
 	from, _ := strconv.Atoi(m.fromInput.Value())
 	to, _ := strconv.Atoi(m.toInput.Value())
 	return from, to
 }
 
-func (m IntModel) SendAddFilterMsg() tea.Msg {
+func (m *IntModel) SendAddFilterMsg() tea.Msg {
 	from, to := m.Value()
 	return shared.PreviousMsg{Message: AddFilterMsg(NewIntFilter(m.name, from, to))}
 }
 
-func (m IntModel) Name() string {
+func (m *IntModel) Name() string {
 	return m.name
 }
