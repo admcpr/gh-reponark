@@ -119,7 +119,7 @@ func (m Model) View() tea.View {
 	m.filtersList = NewFiltersList(m.filters, m.width, m.height)
 	filtersListView := m.filtersList.View()
 
-	search := fmt.Sprint(m.filterSearch.View())
+	search := fmt.Sprint(m.filterSearch.View().Content)
 	help := m.help.View(m.keymap)
 	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, search, filtersListView, help)))
 	// }

@@ -88,7 +88,8 @@ func (m *MainModel) UpdateChild(msg tea.Msg) tea.Cmd {
 func (m MainModel) View() tea.View {
 	child, _ := m.nav.Current()
 	borderStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(shared.AppColors.Green)
-	v := tea.NewView(borderStyle.Render(lipgloss.PlaceHorizontal(m.width-2, lipgloss.Left, fmt.Sprint(child.View()))))
+	childView := fmt.Sprint(child.View().Content)
+	v := tea.NewView(borderStyle.Render(lipgloss.PlaceHorizontal(m.width-2, lipgloss.Left, childView)))
 	v.AltScreen = true
 	return v
 }

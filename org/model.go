@@ -147,7 +147,7 @@ func (m Model) View() tea.View {
 	m.repoModel.SelectRepo(m.repos[m.repoList.Index()])
 
 	var repoList = shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoList.View())
-	var settings = shared.AppStyle.Width(shared.Half(m.width)).Render(fmt.Sprint(m.repoModel.View()))
+	var settings = shared.AppStyle.Width(shared.Half(m.width)).Render(fmt.Sprint(m.repoModel.View().Content))
 	var rightPanel = lipgloss.JoinVertical(lipgloss.Center, settings)
 
 	var views = []string{repoList, rightPanel}
