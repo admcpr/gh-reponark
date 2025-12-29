@@ -8,49 +8,34 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// Resizable models support Bubble Tea and react to window size changes.
+type Resizable interface {
+	tea.Model
+	SetDimensions(width, height int)
+}
+
 type ModelStack struct {
 	elements []tea.Model
 }
 
-func CallSetDimensions(model tea.Model, width, height int) (tea.Model, error) {
-	methodName := "SetDimensions"
-	val := reflect.ValueOf(model)
-
-	// Get to the underlying value and create pointer if needed
-	if val.Kind() != reflect.Ptr {
-		// Make a new pointer to a new struct value
-		ptr := reflect.New(val.Type())
-		// Set the value at the pointer to our original value
-		ptr.Elem().Set(val)
-		// Use the pointer for method calling
-		val = ptr
-	}
-
-	// Find the method
-	method := val.MethodByName(methodName)
-	if !method.IsValid() {
-		return nil, fmt.Errorf("method %s not found", methodName)
-	}
-
-	// Call the method
-	method.Call([]reflect.Value{reflect.ValueOf(width), reflect.ValueOf(height)})
-
-	// Return the modified object
-	return val.Interface().(tea.Model), nil
-}
-
 func (s ModelStack) SetDimensions(width, height int) {
 	for idx := range s.elements {
-		model, err := CallSetDimensions(s.elements[idx], width, height)
-		if err != nil {
-			// TODO: Log error
+		if r, ok := s.elements[idx].(Resizable); ok {
+			r.SetDimensions(width, height)
 		}
-		s.elements[idx] = model
 	}
 }
 
 // Push adds an element to the top of the stack
 func (s *ModelStack) Push(element tea.Model) {
+	if element == nil {
+		panic("ModelStack cannot push nil model")
+	}
+
+	if reflect.ValueOf(element).Kind() != reflect.Ptr {
+		panic(fmt.Sprintf("ModelStack requires pointer models, got %T", element))
+	}
+
 	s.elements = append(s.elements, element)
 }
 
@@ -78,5 +63,8 @@ func (s *ModelStack) Len() int {
 }
 
 func (s *ModelStack) TypeOfHead() reflect.Type {
+	if len(s.elements) == 0 {
+		return nil
+	}
 	return reflect.TypeOf(s.elements[len(s.elements)-1])
 }

@@ -97,11 +97,11 @@ func (m *MainModel) Next(message shared.NextMsg) tea.Cmd {
 	head, _ := m.stack.Peek()
 
 	switch head.(type) {
-	case user.Model:
+	case *user.Model:
 		newModel = org.NewModel(message.ModelData, m.width-2, m.height-2)
-	case org.Model:
+	case *org.Model:
 		newModel = filters.NewModel(message.ModelData, m.width-2, m.height-2)
-	case filters.Model:
+	case *filters.Model:
 		newModel = filters.NewFilterModel(message.ModelData, m.width-2, m.height-2)
 	}
 

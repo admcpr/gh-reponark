@@ -23,14 +23,14 @@ type Model struct {
 	height  int
 }
 
-func NewModel(width, height int) Model {
+func NewModel(width, height int) *Model {
 	list := list.New([]list.Item{}, shared.DefaultDelegate, width, height)
 
 	list.SetStatusBarItemName("Organization", "Organizations")
 	list.Styles.Title = shared.TitleStyle
 	list.SetShowTitle(true)
 
-	return Model{orgList: list, width: width, height: height}
+	return &Model{orgList: list, width: width, height: height}
 }
 
 func (m *Model) SetDimensions(width, height int) {
