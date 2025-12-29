@@ -1,11 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"gh-reponark/filters"
 	"gh-reponark/org"
 	"gh-reponark/shared"
 	"gh-reponark/user"
-	"fmt"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"

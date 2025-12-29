@@ -35,4 +35,4 @@ go run .
 ```
 
 ## Thanks
-Built using [bubbletea](https://github.com/charmbracelet/bubbletea).
+Built using [Bubble Tea](https://charm.land/bubbletea), [Bubbles](https://charm.land/bubbles), and [Lip Gloss](https://charm.land/lipgloss) from [Charm](https://charm.land).
