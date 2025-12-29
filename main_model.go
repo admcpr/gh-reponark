@@ -12,21 +12,22 @@ import (
 )
 
 type MainModel struct {
-	stack  shared.ModelStack
+	nav    shared.Navigator
 	width  int
 	height int
 }
 
 func NewMainModel() MainModel {
-	stack := shared.ModelStack{}
-	stack.Push(user.NewModel(0, 0))
+	nav := shared.NewNavigator()
+	nav.SetValidator(validateTransition)
+	_ = nav.Push(user.NewModel(0, 0))
 	// stack.Push(filters.NewBoolModel("Is something true", false, 0, 0))
 	// stack.Push(NewDateModel("Date between", time.Now(), time.Now().Add(time.Hour*24*7), 0, 0))
 	// stack.Push(NewIntModel("Number between", 0, 100, 0, 0))
 	// stack.Push(filters.NewModel(0, 0))
 
 	return MainModel{
-		stack: stack,
+		nav: nav,
 	}
 }
 
@@ -34,11 +35,11 @@ func (m *MainModel) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
 	// 2 is subtracted from the width and height to account for the border
-	m.stack.SetDimensions(width-2, height-2)
+	m.nav.SetDimensions(width-2, height-2)
 }
 
 func (m MainModel) Init() tea.Cmd {
-	child, _ := m.stack.Peek()
+	child, _ := m.nav.Current()
 	return child.Init()
 }
 
@@ -78,14 +79,14 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *MainModel) UpdateChild(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
-	currentModel, _ := m.stack.Pop()
+	currentModel, _ := m.nav.Pop()
 	currentModel, cmd = currentModel.Update(msg)
-	m.stack.Push(currentModel)
+	_ = m.nav.Push(currentModel)
 	return cmd
 }
 
 func (m MainModel) View() tea.View {
-	child, _ := m.stack.Peek()
+	child, _ := m.nav.Current()
 	borderStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(shared.AppColors.Green)
 	v := tea.NewView(borderStyle.Render(lipgloss.PlaceHorizontal(m.width-2, lipgloss.Left, fmt.Sprint(child.View()))))
 	v.AltScreen = true
@@ -94,7 +95,7 @@ func (m MainModel) View() tea.View {
 
 func (m *MainModel) Next(message shared.NextMsg) tea.Cmd {
 	var newModel tea.Model
-	head, _ := m.stack.Peek()
+	head, _ := m.nav.Current()
 
 	switch head.(type) {
 	case *user.Model:
@@ -110,13 +111,16 @@ func (m *MainModel) Next(message shared.NextMsg) tea.Cmd {
 	}
 
 	cmd := newModel.Init()
-	m.stack.Push(newModel)
+	if err := m.nav.Push(newModel); err != nil {
+		// Transition not allowed; ignore the navigation request.
+		return nil
+	}
 
 	return cmd
 }
 
 func (m *MainModel) Previous(message shared.PreviousMsg) tea.Cmd {
-	_, err := m.stack.Pop()
+	_, err := m.nav.Pop()
 
 	if err != nil {
 		return tea.Quit
@@ -127,4 +131,36 @@ func (m *MainModel) Previous(message shared.PreviousMsg) tea.Cmd {
 	}
 
 	return nil
+}
+
+// validateTransition restricts navigation order between screens.
+func validateTransition(current, next tea.Model) error {
+	switch current.(type) {
+	case *user.Model:
+		if _, ok := next.(*org.Model); ok {
+			return nil
+		}
+	case *org.Model:
+		if _, ok := next.(*filters.Model); ok {
+			return nil
+		}
+	case *filters.Model:
+		if isFilterDetail(next) {
+			return nil
+		}
+	case *filters.BoolModel, *filters.IntModel, *filters.DateModel, *filters.StringModel:
+		// From detail models, allow any next (they should navigate back via Previous)
+		return nil
+	}
+
+	return fmt.Errorf("invalid transition %T -> %T", current, next)
+}
+
+func isFilterDetail(m tea.Model) bool {
+	switch m.(type) {
+	case *filters.BoolModel, *filters.IntModel, *filters.DateModel, *filters.StringModel:
+		return true
+	default:
+		return false
+	}
 }
