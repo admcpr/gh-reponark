@@ -105,6 +105,10 @@ func (m *MainModel) Next(message shared.NextMsg) tea.Cmd {
 		newModel = filters.NewFilterModel(message.ModelData, m.width-2, m.height-2)
 	}
 
+	if newModel == nil {
+		return nil
+	}
+
 	cmd := newModel.Init()
 	m.stack.Push(newModel)
 

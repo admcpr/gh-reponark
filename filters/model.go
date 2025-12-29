@@ -99,8 +99,19 @@ func NewFilterModel(modelData interface{}, width, height int) tea.Model {
 		return NewIntModel(property.Name, 0, 100000, width, height)
 	case "time.Time":
 		return NewDateModel(property.Name, time.Time{}, time.Now(), width, height)
+	case "string":
+		return NewStringModel(property.Name, "", width, height)
 	default:
 		return nil
+	}
+}
+
+func isSupportedPropertyType(t string) bool {
+	switch t {
+	case "bool", "int", "time.Time", "string":
+		return true
+	default:
+		return false
 	}
 }
 

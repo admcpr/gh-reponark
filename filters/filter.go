@@ -9,3 +9,7 @@ type Filter interface {
 	Matches(property repo.RepoProperty) bool
 	String() string
 }
+
+type RepoFilter interface {
+	FilterRepos([]repo.RepoConfig) []repo.RepoConfig
+}

@@ -62,6 +62,9 @@ func (m FilterSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case filtersListMsg:
 		var suggestions []string
 		for _, r := range msg.Properties {
+			if !isSupportedPropertyType(r.Type) {
+				continue
+			}
 			suggestions = append(suggestions, r.Name)
 			m.properties[r.Name] = Property{r.Name, r.Description, r.Type}
 		}
