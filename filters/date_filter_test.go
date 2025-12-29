@@ -25,13 +25,13 @@ func (s *DateFilterSuite) SetupTest() {
 
 func (s *DateFilterSuite) TestNewDateFilter() {
 	filter := NewDateFilter("example", s.from, s.to)
-	s.Equal("example", filter.Name)
+	s.Equal("example", filter.Name())
 	s.Equal(s.from, filter.From)
 	s.Equal(s.to, filter.To)
 }
 
 func (s *DateFilterSuite) TestGetName() {
-	s.Equal("test", s.filter.GetName())
+	s.Equal("test", s.filter.Name())
 }
 
 func (s *DateFilterSuite) TestMatches() {

@@ -1,16 +1,17 @@
 package filters
 
 import (
+	"fmt"
 	"gh-reponark/repo"
 	"gh-reponark/shared"
 	"sort"
 	"time"
 
-	"github.com/charmbracelet/bubbles/v2/help"
-	"github.com/charmbracelet/bubbles/v2/key"
-	"github.com/charmbracelet/bubbles/v2/list"
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type AddFilterMsg Filter
@@ -60,12 +61,11 @@ func NewModel(modelData interface{}, width, height int) *Model {
 	}
 }
 
-func (m Model) Init() (tea.Model, tea.Cmd) {
-	_, cmd := m.filterSearch.Init()
-	return m, cmd
+func (m *Model) Init() tea.Cmd {
+	return m.filterSearch.Init()
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -78,9 +78,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case AddFilterMsg:
-		m.filters[msg.GetName()] = Filter(msg)
+		m.filters[msg.Name()] = Filter(msg)
 		m.filterSearch = NewFilterSearchModel()
-		m.filterSearch, cmd = m.filterSearch.Init()
+		cmd := m.filterSearch.Init()
 		return m, cmd
 	}
 
@@ -99,18 +99,29 @@ func NewFilterModel(modelData interface{}, width, height int) tea.Model {
 		return NewIntModel(property.Name, 0, 100000, width, height)
 	case "time.Time":
 		return NewDateModel(property.Name, time.Time{}, time.Now(), width, height)
+	case "string":
+		return NewStringModel(property.Name, "", width, height)
 	default:
 		return nil
 	}
 }
 
-func (m Model) View() string {
+func isSupportedPropertyType(t string) bool {
+	switch t {
+	case "bool", "int", "time.Time", "string":
+		return true
+	default:
+		return false
+	}
+}
+
+func (m Model) View() tea.View {
 	m.filtersList = NewFiltersList(m.filters, m.width, m.height)
 	filtersListView := m.filtersList.View()
 
-	search := m.filterSearch.View()
+	search := fmt.Sprint(m.filterSearch.View().Content)
 	help := m.help.View(m.keymap)
-	return lipgloss.JoinVertical(lipgloss.Left, search, filtersListView, help)
+	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, search, filtersListView, help)))
 	// }
 }
 
@@ -120,7 +131,7 @@ func NewFiltersList(filters map[string]Filter, width, height int) list.Model {
 	items := make([]list.Item, len(filters))
 	i := 0
 	for _, filter := range filters {
-		items[i] = shared.SimpleItem(filter.GetName())
+		items[i] = shared.SimpleItem(filter.Name())
 		i++
 	}
 

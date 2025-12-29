@@ -7,17 +7,17 @@ import (
 )
 
 type DateFilter struct {
-	Name string
+	name string
 	From time.Time
 	To   time.Time
 }
 
 func NewDateFilter(name string, from, to time.Time) DateFilter {
-	return DateFilter{Name: name, From: from, To: to}
+	return DateFilter{name: name, From: from, To: to}
 }
 
-func (f DateFilter) GetName() string {
-	return f.Name
+func (f DateFilter) Name() string {
+	return f.name
 }
 
 func (f DateFilter) Matches(property repo.RepoProperty) bool {
@@ -31,5 +31,5 @@ func (f DateFilter) Matches(property repo.RepoProperty) bool {
 }
 
 func (f DateFilter) String() string {
-	return fmt.Sprintf("%s between %s and %s", f.Name, f.From.Format("2006-01-02"), f.To.Format("2006-01-02"))
+	return fmt.Sprintf("%s between %s and %s", f.name, f.From.Format("2006-01-02"), f.To.Format("2006-01-02"))
 }

@@ -9,10 +9,10 @@ import (
 	"gh-reponark/repo"
 	"gh-reponark/shared"
 
-	"github.com/charmbracelet/bubbles/v2/list"
-	"github.com/charmbracelet/bubbles/v2/progress"
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/progress"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/cli/go-gh/v2/pkg/api"
 	graphql "github.com/cli/shurcooL-graphql"
 )
@@ -74,11 +74,11 @@ func (m *Model) populateRepoList() {
 	m.repoModel.SelectRepo(m.repos[m.repoList.Index()])
 }
 
-func (m Model) Init() (tea.Model, tea.Cmd) {
-	return m, getRepoList(m.Title, m.isUser)
+func (m *Model) Init() tea.Cmd {
+	return getRepoList(m.Title, m.isUser)
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -112,16 +112,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case progress.FrameMsg:
 		progressModel, cmd := m.progress.Update(msg)
-		m.progress = progressModel.(progress.Model)
+		m.progress = progressModel
 		return m, cmd
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "F", "f":
-			return m, handleNext
-		}
-		switch msg.String() {
-		case "f":
 			return m, func() tea.Msg {
 				return shared.NextMsg{ModelData: m.filters}
 			}
@@ -144,25 +140,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) View() string {
+func (m *Model) View() tea.View {
 	if m.progress.Percent() < 1 {
 		return m.ProgressView()
 	}
+
+	if len(m.repos) == 0 || m.repoList.Index() < 0 || m.repoList.Index() >= len(m.repos) {
+		repoList := shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoList.View())
+		empty := shared.AppStyle.Width(shared.Half(m.width)).Render("No repositories found")
+		return tea.NewView(fmt.Sprint(lipgloss.JoinHorizontal(lipgloss.Top, repoList, empty)))
+	}
+
 	m.repoModel.SelectRepo(m.repos[m.repoList.Index()])
 
 	var repoList = shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoList.View())
-	var settings = shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoModel.View())
+	var settings = shared.AppStyle.Width(shared.Half(m.width)).Render(fmt.Sprint(m.repoModel.View().Content))
 	var rightPanel = lipgloss.JoinVertical(lipgloss.Center, settings)
 
 	var views = []string{repoList, rightPanel}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, views...)
+	return tea.NewView(fmt.Sprint(lipgloss.JoinHorizontal(lipgloss.Top, views...)))
 }
 
-func (m Model) ProgressView() string {
+func (m *Model) ProgressView() tea.View {
 	m.progress.SetWidth(m.width)
 	text := fmt.Sprintf("Getting repositories ... %d of %d\n", len(m.repos), m.repoCount)
-	return lipgloss.JoinVertical(lipgloss.Center, text, m.progress.View())
+	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Center, text, m.progress.View())))
 }
 
 func getRepoDetails(owner string, name string) tea.Cmd {
@@ -217,8 +220,4 @@ func queryRepositories(client *api.GraphQLClient, isUser bool, variables map[str
 		err := client.Query("OrganizationRepositories", &query, variables)
 		return query, err
 	}
-}
-
-func handleNext() tea.Msg {
-	return shared.NextMsg{}
 }

@@ -1,12 +1,13 @@
 package filters
 
 import (
+	"fmt"
 	"gh-reponark/repo"
 	"gh-reponark/shared"
 
-	"github.com/charmbracelet/bubbles/v2/textinput"
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type FilterSearchModel struct {
@@ -19,8 +20,14 @@ func NewFilterSearchModel() FilterSearchModel {
 	ti := textinput.New()
 	ti.Placeholder = "Type to search"
 	ti.Prompt = "Add filter: "
-	ti.PromptStyle = shared.PromptStyle.Width(len(ti.Prompt)).MarginLeft(2)
-	ti.Cursor.Style = shared.CursorStyle
+	// Set styles using the new textinput Styles API
+	styles := textinput.DefaultStyles(false)
+	styles.Focused.Prompt = shared.PromptStyle.Width(len(ti.Prompt))
+	styles.Blurred.Prompt = shared.PromptStyle.Width(len(ti.Prompt))
+	styles.Focused.Text = shared.TextStyle
+	styles.Blurred.Text = shared.TextStyle
+	styles.Cursor.Color = shared.AppColors.Foreground
+	ti.SetStyles(styles)
 	ti.Focus()
 	ti.CharLimit = 50
 	ti.SetWidth(20)
@@ -37,8 +44,8 @@ func NewFilterSearchModel() FilterSearchModel {
 
 type PropertySelectedMsg Property
 
-func (m FilterSearchModel) Init() (tea.Model, tea.Cmd) {
-	return m, tea.Batch(getFilters, textinput.Blink)
+func (m FilterSearchModel) Init() tea.Cmd {
+	return tea.Batch(getFilters, textinput.Blink)
 }
 
 func (m FilterSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -55,6 +62,9 @@ func (m FilterSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case filtersListMsg:
 		var suggestions []string
 		for _, r := range msg.Properties {
+			if !isSupportedPropertyType(r.Type) {
+				continue
+			}
 			suggestions = append(suggestions, r.Name)
 			m.properties[r.Name] = Property{r.Name, r.Description, r.Type}
 		}
@@ -67,8 +77,10 @@ func (m FilterSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m FilterSearchModel) View() string {
-	return lipgloss.JoinVertical(lipgloss.Left, m.textinput.View(), m.LookupDescription())
+func (m FilterSearchModel) View() tea.View {
+	style := lipgloss.NewStyle().Margin(0, 0, 1, 2)
+	search := lipgloss.JoinVertical(lipgloss.Left, m.textinput.View(), m.LookupDescription())
+	return tea.NewView(fmt.Sprint(style.Render(search)))
 }
 
 func (m FilterSearchModel) LookupDescription() string {

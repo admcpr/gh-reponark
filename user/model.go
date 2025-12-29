@@ -1,12 +1,13 @@
 package user
 
 import (
+	"fmt"
 	"sort"
 
 	"gh-reponark/shared"
 
-	"github.com/charmbracelet/bubbles/v2/list"
-	tea "github.com/charmbracelet/bubbletea/v2"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 	"github.com/cli/go-gh/v2/pkg/api"
 	graphql "github.com/cli/shurcooL-graphql"
 )
@@ -22,14 +23,14 @@ type Model struct {
 	height  int
 }
 
-func NewModel(width, height int) Model {
+func NewModel(width, height int) *Model {
 	list := list.New([]list.Item{}, shared.DefaultDelegate, width, height)
 
 	list.SetStatusBarItemName("Organization", "Organizations")
 	list.Styles.Title = shared.TitleStyle
 	list.SetShowTitle(true)
 
-	return Model{orgList: list, width: width, height: height}
+	return &Model{orgList: list, width: width, height: height}
 }
 
 func (m *Model) SetDimensions(width, height int) {
@@ -37,11 +38,11 @@ func (m *Model) SetDimensions(width, height int) {
 	m.height = height
 }
 
-func (m Model) Init() (tea.Model, tea.Cmd) {
-	return m, getUser
+func (m Model) Init() tea.Cmd {
+	return getUser
 }
 
-func (m *Model) SetorgList(query Query) {
+func (m *Model) SetOrgList(query Query) {
 	m.login = query.User.Login
 	items := make([]list.Item, len(query.User.Organizations.Nodes))
 	for i, org := range query.User.Organizations.Nodes {
@@ -61,12 +62,12 @@ func (m *Model) SetorgList(query Query) {
 	m.orgList.SetItems(items)
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case queryCompleteMsg:
-		m.SetorgList(Query(msg))
+		m.SetOrgList(Query(msg))
 
 		return m, cmd
 	case tea.KeyPressMsg:
@@ -94,10 +95,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	m.orgList.SetWidth(m.width)
 	m.orgList.SetHeight(m.height)
-	return shared.AppStyle.Render(m.orgList.View())
+	return tea.NewView(fmt.Sprint(shared.AppStyle.Render(m.orgList.View())))
 }
 
 func getUser() tea.Msg {

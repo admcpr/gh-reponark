@@ -9,13 +9,13 @@ import (
 
 	"gh-reponark/shared"
 
-	"github.com/charmbracelet/bubbles/v2/textinput"
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type DateModel struct {
-	Name      string
+	name      string
 	fromInput textinput.Model
 	toInput   textinput.Model
 	width     int
@@ -62,15 +62,20 @@ func NewDateInputModel(prompt string, value time.Time) textinput.Model {
 	m.Prompt = prompt
 	m.CharLimit = 10
 	m.Validate = func(s string) error { return dateValidator(s, prompt) }
-	m.PromptStyle = shared.PromptStyle
-	m.TextStyle = shared.TextStyle
+	styles := textinput.DefaultStyles(false)
+	styles.Focused.Prompt = shared.PromptStyle
+	styles.Blurred.Prompt = shared.PromptStyle
+	styles.Focused.Text = shared.TextStyle
+	styles.Blurred.Text = shared.TextStyle
+	styles.Cursor.Color = shared.AppColors.Foreground
+	m.SetStyles(styles)
 
 	return m
 }
 
-func NewDateModel(name string, from, to time.Time, width, height int) DateModel {
-	m := DateModel{
-		Name:      name,
+func NewDateModel(name string, from, to time.Time, width, height int) *DateModel {
+	m := &DateModel{
+		name:      name,
 		fromInput: NewDateInputModel("From", from),
 		toInput:   NewDateInputModel("To", to),
 	}
@@ -83,11 +88,11 @@ func NewDateModel(name string, from, to time.Time, width, height int) DateModel 
 	return m
 }
 
-func (m DateModel) Init() (tea.Model, tea.Cmd) {
-	return m, textinput.Blink
+func (m *DateModel) Init() tea.Cmd {
+	return textinput.Blink
 }
 
-func (m DateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *DateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -121,7 +126,7 @@ func (m DateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m DateModel) View() string {
+func (m *DateModel) View() tea.View {
 	errorText := ""
 	if m.fromInput.Err != nil {
 		errorText = "\n" + shared.ErrorStyle.Render(m.fromInput.Err.Error())
@@ -130,16 +135,16 @@ func (m DateModel) View() string {
 		errorText = "\n" + shared.ErrorStyle.Render(m.toInput.Err.Error())
 	}
 	inputs := lipgloss.JoinVertical(lipgloss.Left, m.fromInput.View(), m.toInput.View(), errorText)
-	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(m.Name), inputs)
+	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(m.name), inputs)
 
-	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))
+	return tea.NewView(fmt.Sprint(lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))))
 }
 
 func (m *DateModel) Focus() tea.Cmd {
 	return m.fromInput.Focus()
 }
 
-func (m *DateModel) GetValue() (time.Time, time.Time, error) {
+func (m *DateModel) Value() (time.Time, time.Time, error) {
 	fromError := m.fromInput.Validate(m.fromInput.Value())
 	if fromError != nil {
 		return time.Time{}, time.Time{}, fromError
@@ -163,8 +168,10 @@ func (m *DateModel) GetValue() (time.Time, time.Time, error) {
 	return from, to, nil
 }
 
-func (m DateModel) SendAddFilterMsg() tea.Msg {
-	from, to, _ := m.GetValue()
+func (m *DateModel) SendAddFilterMsg() tea.Msg {
+	from, to, _ := m.Value()
 
-	return shared.PreviousMsg{Message: AddFilterMsg(NewDateFilter(m.Name, from, to))}
+	return shared.PreviousMsg{Message: AddFilterMsg(NewDateFilter(m.name, from, to))}
 }
+
+func (m *DateModel) Name() string { return m.name }

@@ -7,16 +7,16 @@ import (
 )
 
 type BoolFilter struct {
-	Name  string
+	name  string
 	Value bool
 }
 
 func NewBoolFilter(name string, value bool) BoolFilter {
-	return BoolFilter{Name: name, Value: value}
+	return BoolFilter{name: name, Value: value}
 }
 
-func (f BoolFilter) GetName() string {
-	return f.Name
+func (f BoolFilter) Name() string {
+	return f.name
 }
 
 func (f BoolFilter) Matches(property repo.RepoProperty) bool {
@@ -28,5 +28,5 @@ func (f BoolFilter) Matches(property repo.RepoProperty) bool {
 }
 
 func (f BoolFilter) String() string {
-	return fmt.Sprintf("%s = %s", f.Name, shared.YesNo(f.Value))
+	return fmt.Sprintf("%s = %s", f.name, shared.YesNo(f.Value))
 }

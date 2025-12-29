@@ -3,8 +3,8 @@ package shared
 import (
 	"image/color"
 
-	"github.com/charmbracelet/bubbles/v2/list"
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/bubbles/v2/list"
+	"charm.land/lipgloss/v2"
 )
 
 type colors struct {
