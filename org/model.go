@@ -45,12 +45,6 @@ func NewModel(modelData interface{}, width, height int) *Model {
 	orgKey := modelData.(shared.OrgKey)
 	help := shared.NewHelpModel(width)
 	keymap := orgKeyMap{}
-	help.Styles.ShortKey = lipgloss.NewStyle().Foreground(shared.AppColors.Foreground)
-	help.Styles.ShortDesc = lipgloss.NewStyle().Foreground(shared.AppColors.Foreground)
-	help.Styles.ShortSeparator = lipgloss.NewStyle().Foreground(shared.AppColors.BrightBlack)
-	help.Styles.FullKey = lipgloss.NewStyle().Foreground(shared.AppColors.Foreground)
-	help.Styles.FullDesc = lipgloss.NewStyle().Foreground(shared.AppColors.Foreground)
-	help.Styles.FullSeparator = lipgloss.NewStyle().Foreground(shared.AppColors.BrightBlack)
 
 	return &Model{
 		Title:     orgKey.Name,
@@ -160,8 +154,6 @@ func (m *Model) View() tea.View {
 		return m.ProgressView()
 	}
 
-	m.help.SetWidth(m.width)
-
 	if len(m.repos) == 0 || m.repoList.Index() < 0 || m.repoList.Index() >= len(m.repos) {
 		repoList := shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoList.View())
 		empty := shared.AppStyle.Width(shared.Half(m.width)).Render("No repositories found")
@@ -199,9 +191,6 @@ func (m Model) HeaderView() tea.View {
 }
 
 func (m Model) HelpView() tea.View {
-	if m.width > 0 {
-		m.help.SetWidth(m.width)
-	}
 	return tea.NewView(m.help.View(m.keymap))
 }
 
