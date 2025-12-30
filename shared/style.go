@@ -3,6 +3,7 @@ package shared
 import (
 	"image/color"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/list"
 	"charm.land/lipgloss/v2"
 )
@@ -78,6 +79,14 @@ var (
 			Border(lipgloss.NormalBorder(), false, false, true, true).
 			Padding(0, 1, 0, 1)
 
+	LayoutHeaderStyle = TitleStyle.Align(lipgloss.Left)
+
+	LayoutFooterStyle = AppStyle.
+				Foreground(AppColors.Foreground).
+				BorderForeground(AppColors.BrightBlack).
+				Border(lipgloss.NormalBorder(), false, false, false, false).
+				Padding(0, 1)
+
 	ErrorStyle = lipgloss.NewStyle().Foreground(AppColors.Red)
 
 	PromptStyle = AppStyle.Width(7).
@@ -120,6 +129,23 @@ var (
 
 	DefaultDelegate = BuildDefaultDelegate()
 )
+
+func NewHelpModel(width int) help.Model {
+	m := help.New()
+	styles := help.DefaultStyles(true)
+	styles.ShortKey = lipgloss.NewStyle().Foreground(AppColors.Foreground)
+	styles.ShortDesc = lipgloss.NewStyle().Foreground(AppColors.Foreground)
+	styles.ShortSeparator = lipgloss.NewStyle().Foreground(AppColors.BrightBlack)
+	styles.FullKey = lipgloss.NewStyle().Foreground(AppColors.Foreground)
+	styles.FullDesc = lipgloss.NewStyle().Foreground(AppColors.Foreground)
+	styles.FullSeparator = lipgloss.NewStyle().Foreground(AppColors.BrightBlack)
+	styles.Ellipsis = lipgloss.NewStyle().Foreground(AppColors.BrightBlack)
+	m.Styles = styles
+	if width > 0 {
+		m.SetWidth(width)
+	}
+	return m
+}
 
 func BuildDefaultDelegate() list.DefaultDelegate {
 	d := list.NewDefaultDelegate()

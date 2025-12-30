@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"gh-reponark/filters"
@@ -10,6 +11,7 @@ import (
 	"gh-reponark/user"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -62,4 +64,12 @@ func TestMainModel_Previous_EmptyNavQuits(t *testing.T) {
 
 	cmd := m.Previous(shared.PreviousMsg{})
 	assert.Equal(t, reflect.ValueOf(tea.Quit).Pointer(), reflect.ValueOf(cmd).Pointer())
+}
+
+func TestRenderFooter_OrgModelNotEmpty(t *testing.T) {
+	m := MainModel{}
+	orgModel := org.NewModel(shared.OrgKey{Name: "demo", IsUser: false}, 80, 24)
+	footer := m.renderFooter(orgModel)
+	assert.NotEmpty(t, strings.TrimSpace(footer))
+	assert.Greater(t, lipgloss.Height(footer), 0)
 }

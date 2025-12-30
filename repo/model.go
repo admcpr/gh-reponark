@@ -5,6 +5,7 @@ import (
 	"gh-reponark/shared"
 	"sort"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -17,6 +18,8 @@ type Model struct {
 	activeTab    int
 	width        int
 	height       int
+	help         help.Model
+	keymap       KeyMap
 }
 
 func NewModel(width, height int) Model {
@@ -25,6 +28,8 @@ func NewModel(width, height int) Model {
 		repository: RepoConfig{Properties: map[string]RepoProperty{}, PropertyGroups: map[string][]RepoProperty{}},
 		width:      width,
 		height:     height,
+		help:       shared.NewHelpModel(width),
+		keymap:     NewRepoKeyMap(),
 	}
 }
 
@@ -32,6 +37,7 @@ func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
 	m.repoHeader.SetDimensions(width, height)
+	m.help.SetWidth(width)
 }
 
 func (m Model) Init() tea.Cmd {
@@ -87,6 +93,14 @@ func (m Model) View() tea.View {
 	settings := m.settingsList.View()
 
 	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, settings)))
+}
+
+func (m Model) HeaderView() tea.View {
+	return m.repoHeader.View()
+}
+
+func (m Model) HelpView() tea.View {
+	return tea.NewView(m.help.View(m.keymap))
 }
 
 func NewSettingsList(activeSettings []RepoProperty, title string, width, height int) list.Model {

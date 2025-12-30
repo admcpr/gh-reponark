@@ -9,6 +9,8 @@ import (
 	"gh-reponark/repo"
 	"gh-reponark/shared"
 
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
@@ -28,6 +30,8 @@ type Model struct {
 	filters   filters.FilterMap
 	isUser    bool
 
+	help      help.Model
+	keymap    orgKeyMap
 	repoList  list.Model
 	repoModel repo.Model
 
@@ -39,12 +43,16 @@ type Model struct {
 
 func NewModel(modelData interface{}, width, height int) *Model {
 	orgKey := modelData.(shared.OrgKey)
+	help := shared.NewHelpModel(width)
+	keymap := orgKeyMap{}
 
 	return &Model{
 		Title:     orgKey.Name,
 		isUser:    orgKey.IsUser,
 		width:     width,
 		height:    height,
+		help:      help,
+		keymap:    keymap,
 		repoModel: repo.NewModel(width/2, height),
 		repoList:  list.New([]list.Item{}, shared.SimpleItemDelegate{}, width/2, height),
 		progress:  progress.New(progress.WithoutPercentage()),
@@ -54,6 +62,7 @@ func NewModel(modelData interface{}, width, height int) *Model {
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
+	m.help.SetWidth(width)
 }
 
 func (m *Model) populateRepoList() {
@@ -162,6 +171,29 @@ func (m *Model) View() tea.View {
 	return tea.NewView(fmt.Sprint(lipgloss.JoinHorizontal(lipgloss.Top, views...)))
 }
 
+func (m Model) HeaderView() tea.View {
+	label := m.Title
+	if label == "" {
+		label = "Repositories"
+	}
+
+	if m.repoCount > 0 {
+		label = fmt.Sprintf("%s (%d repos)", label, m.repoCount)
+	}
+
+	prefix := "Organization"
+	if m.isUser {
+		prefix = "User"
+	}
+
+	title := fmt.Sprintf("%s: %s", prefix, label)
+	return tea.NewView(shared.TitleStyle.Render(title))
+}
+
+func (m Model) HelpView() tea.View {
+	return tea.NewView(m.help.View(m.keymap))
+}
+
 func (m *Model) ProgressView() tea.View {
 	m.progress.SetWidth(m.width)
 	text := fmt.Sprintf("Getting repositories ... %d of %d\n", len(m.repos), m.repoCount)
@@ -220,4 +252,21 @@ func queryRepositories(client *api.GraphQLClient, isUser bool, variables map[str
 		err := client.Query("OrganizationRepositories", &query, variables)
 		return query, err
 	}
+}
+
+type orgKeyMap struct{}
+
+func (k orgKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{
+		key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+		key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next pane")),
+		key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev pane")),
+		key.NewBinding(key.WithKeys("f", "F"), key.WithHelp("f", "filters")),
+		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+	}
+}
+
+func (k orgKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{k.ShortHelp()}
 }

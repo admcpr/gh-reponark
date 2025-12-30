@@ -42,10 +42,25 @@ func (m HeaderModel) Init() tea.Cmd {
 }
 
 func (m HeaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case TabSelectMessage:
+		if msg.Index >= 0 && msg.Index < len(m.titles) {
+			m.paginator.Page = msg.Index
+		}
+	}
 	return m, nil
 }
 
 func (m HeaderModel) View() tea.View {
-	heading := shared.TitleStyle.Render(m.titles[m.paginator.Page])
+	if len(m.titles) == 0 {
+		return tea.NewView("")
+	}
+
+	page := m.paginator.Page
+	if page >= len(m.titles) {
+		page = len(m.titles) - 1
+	}
+
+	heading := shared.TitleStyle.Render(m.titles[page])
 	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, heading+"\n"+m.paginator.View())))
 }

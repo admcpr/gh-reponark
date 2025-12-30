@@ -32,6 +32,7 @@ type Model struct {
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
+	m.help.SetWidth(width)
 }
 
 type Property struct {
@@ -45,7 +46,7 @@ func NewModel(modelData interface{}, width, height int) *Model {
 	list := list.New([]list.Item{}, shared.SimpleItemDelegate{}, width, height-4)
 	repository := repo.Repository{}
 
-	help := help.New()
+	help := shared.NewHelpModel(width)
 	keymap := filterKeyMap{}
 
 	return &Model{
@@ -120,9 +121,16 @@ func (m Model) View() tea.View {
 	filtersListView := m.filtersList.View()
 
 	search := fmt.Sprint(m.filterSearch.View().Content)
-	help := m.help.View(m.keymap)
-	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, search, filtersListView, help)))
+	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, search, filtersListView)))
 	// }
+}
+
+func (m Model) HeaderView() tea.View {
+	return tea.NewView(shared.TitleStyle.Render("Filters"))
+}
+
+func (m Model) HelpView() tea.View {
+	return tea.NewView(m.help.View(m.keymap))
 }
 
 type filtersListMsg repo.RepoConfig

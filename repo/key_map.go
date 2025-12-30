@@ -23,10 +23,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 // FullHelp returns keybindings for the expanded help view. It's part of the
 // key.Map interface.
 func (k KeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Up, k.Down, k.Left, k.Right}, // first column
-		{k.Filter, k.Esc, k.Quit},       // second column
-	}
+	return [][]key.Binding{k.ShortHelp()}
 }
 
 func NewRepoKeyMap() KeyMap {
