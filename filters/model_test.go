@@ -18,9 +18,24 @@ func TestNewModel(t *testing.T) {
 
 	assert.Equal(t, 80, m.width)
 	assert.Equal(t, 30, m.height)
+	assert.NotNil(t, m.filters)
 	assert.Empty(t, m.filters)
 	assert.Empty(t, m.properties)
 	assert.NotNil(t, m.filterSearch)
+}
+
+func TestNewModel_SeedsWithCurrentFilters(t *testing.T) {
+	current := FilterMap{"Is Archived": NewBoolFilter("Is Archived", true)}
+
+	m := NewModel(current, 80, 30)
+
+	assert.Equal(t, current, m.filters)
+	assert.Contains(t, plain(m.View()), "Is Archived")
+
+	// The screen works on its own copy so the caller only sees changes via FiltersMsg.
+	m.Update(AddFilterMsg(NewIntFilter("Stargazer Count", 1, 10)))
+	assert.Len(t, m.filters, 2)
+	assert.Len(t, current, 1)
 }
 
 func TestModel_SetDimensions(t *testing.T) {
@@ -167,10 +182,6 @@ func TestNewFilterModel(t *testing.T) {
 			tt.check(t, NewFilterModel(tt.property, 60, 40))
 		})
 	}
-}
-
-func TestNewFilterModel_PanicsOnWrongData(t *testing.T) {
-	assert.Panics(t, func() { NewFilterModel("not a property", 60, 40) })
 }
 
 func TestIsSupportedPropertyType(t *testing.T) {

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"gh-reponark/repo"
-	"gh-reponark/shared"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
@@ -103,17 +102,17 @@ func TestFilterSearchModel_Update_EnterWithSuggestion(t *testing.T) {
 	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.NotNil(t, cmd)
 
-	next, ok := cmd().(shared.NextMsg)
-	assert.True(t, ok, "expected a NextMsg")
-	assert.Equal(t, Property{Name: "Url", Description: "The HTTP URL.", Type: "string"}, next.ModelData)
+	edit, ok := cmd().(EditFilterMsg)
+	assert.True(t, ok, "expected an EditFilterMsg")
+	assert.Equal(t, Property{Name: "Url", Description: "The HTTP URL.", Type: "string"}, edit.Property)
 }
 
-func TestFilterSearchModel_SendNextMsg(t *testing.T) {
+func TestFilterSearchModel_SendEditFilterMsg(t *testing.T) {
 	m := typeInto(newSearchModelWithProperties(t), "Na")
 
-	next, ok := m.SendNextMsg().(shared.NextMsg)
+	edit, ok := m.SendEditFilterMsg().(EditFilterMsg)
 	assert.True(t, ok)
-	assert.Equal(t, "Name", next.ModelData.(Property).Name)
+	assert.Equal(t, "Name", edit.Property.Name)
 }
 
 func TestFilterSearchModel_View(t *testing.T) {

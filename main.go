@@ -4,11 +4,19 @@ import (
 	"fmt"
 	"os"
 
+	"gh-reponark/github"
+
 	tea "charm.land/bubbletea/v2"
 )
 
 func main() {
-	mainModel := NewMainModel()
+	client, err := github.NewClient()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gh-reponark: %v\n", err)
+		os.Exit(1)
+	}
+
+	mainModel := NewMainModel(client)
 	// p := tea.NewProgram(mainModel, tea.WithKeyboardEnhancements())
 	p := tea.NewProgram(mainModel)
 

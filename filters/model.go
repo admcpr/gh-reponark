@@ -17,6 +17,10 @@ import (
 type AddFilterMsg Filter
 type FiltersMsg FilterMap
 
+// OpenFiltersMsg asks the application to show the filter screen, seeded with
+// the filters that are currently applied.
+type OpenFiltersMsg struct{ Filters FilterMap }
+
 type Model struct {
 	filterSearch tea.Model
 	filtersList  list.Model
@@ -41,13 +45,20 @@ type Property struct {
 	Type        string
 }
 
-func NewModel(modelData interface{}, width, height int) *Model {
+// NewModel creates the filter screen. current holds the filters already
+// applied; they are copied so edits only reach the caller via FiltersMsg.
+func NewModel(current FilterMap, width, height int) *Model {
 	fsm := NewFilterSearchModel()
 	list := list.New([]list.Item{}, shared.SimpleItemDelegate{}, width, height-4)
 	repository := repo.Repository{}
 
 	help := shared.NewHelpModel(width)
 	keymap := filterKeyMap{}
+
+	selected := make(FilterMap, len(current))
+	for name, filter := range current {
+		selected[name] = filter
+	}
 
 	return &Model{
 		filterSearch: fsm,
@@ -56,7 +67,7 @@ func NewModel(modelData interface{}, width, height int) *Model {
 		help:         help,
 		keymap:       keymap,
 		properties:   make(map[string]Property),
-		filters:      make(map[string]Filter),
+		filters:      selected,
 		width:        width,
 		height:       height,
 	}
@@ -90,9 +101,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func NewFilterModel(modelData interface{}, width, height int) tea.Model {
-	property := modelData.(Property)
-
+// NewFilterModel returns the editor for a property, or nil when the property
+// type cannot be filtered on.
+func NewFilterModel(property Property, width, height int) tea.Model {
 	switch property.Type {
 	case "bool":
 		return NewBoolModel(property.Name, false, width, height)

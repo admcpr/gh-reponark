@@ -42,7 +42,9 @@ func NewFilterSearchModel() FilterSearchModel {
 	}
 }
 
-type PropertySelectedMsg Property
+// EditFilterMsg asks the application to open the editor for a property so a
+// filter on it can be added.
+type EditFilterMsg struct{ Property Property }
 
 func (m FilterSearchModel) Init() tea.Cmd {
 	return tea.Batch(getFilters, textinput.Blink)
@@ -55,7 +57,7 @@ func (m FilterSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			_, exists := m.CurrentPropertySuggestion()
 			if exists {
-				return m, m.SendNextMsg
+				return m, m.SendEditFilterMsg
 			}
 			return m, nil
 		}
@@ -97,9 +99,9 @@ func (m FilterSearchModel) CurrentPropertySuggestion() (Property, bool) {
 	return prop, exists
 }
 
-func (m FilterSearchModel) SendNextMsg() tea.Msg {
+func (m FilterSearchModel) SendEditFilterMsg() tea.Msg {
 	property, _ := m.CurrentPropertySuggestion()
-	return shared.NextMsg{ModelData: property}
+	return EditFilterMsg{Property: property}
 }
 
 func getFilters() tea.Msg {

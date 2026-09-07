@@ -1,10 +1,13 @@
 package org
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
 	"gh-reponark/filters"
+	"gh-reponark/github"
+	"gh-reponark/github/githubtest"
 	"gh-reponark/repo"
 	"gh-reponark/shared"
 
@@ -21,36 +24,22 @@ func plain(v tea.View) string {
 }
 
 func newOrgModel() *Model {
-	return NewModel(shared.OrgKey{Name: "demo", IsUser: false}, 80, 24)
+	return NewModel(&githubtest.Fake{}, shared.OrgKey{Name: "demo", IsUser: false}, 80, 24)
 }
 
-func newOrgQueryMsg(names ...string) orgQueryMsg {
-	query := OrgQuery{}
-	for _, name := range names {
-		query.Organization.Repositories.Nodes = append(query.Organization.Repositories.Nodes,
-			struct {
-				Name string
-				Url  string
-			}{Name: name})
-	}
-	return orgQueryMsg(query)
-}
-
-func newRepoQueryMsg(repository repo.Repository) repoQueryMsg {
-	return repoQueryMsg(repo.Query{Repository: repository})
+// lastPage builds a page message that completes the listing.
+func lastPage(repositories ...repo.Repository) repositoryPageMsg {
+	return repositoryPageMsg(github.RepositoryPage{
+		Repositories: repositories,
+		TotalCount:   len(repositories),
+		HasNextPage:  false,
+	})
 }
 
 // newLoadedModel returns a model that has received all of its repositories.
 func newLoadedModel(repositories ...repo.Repository) *Model {
 	m := newOrgModel()
-	names := make([]string, len(repositories))
-	for i, r := range repositories {
-		names[i] = r.Name
-	}
-	m.Update(newOrgQueryMsg(names...))
-	for _, r := range repositories {
-		m.Update(newRepoQueryMsg(r))
-	}
+	m.Update(lastPage(repositories...))
 	return m
 }
 
@@ -66,7 +55,7 @@ func TestNewModel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := NewModel(tt.key, 80, 24)
+			m := NewModel(&githubtest.Fake{}, tt.key, 80, 24)
 
 			assert.Equal(t, tt.key.Name, m.Title)
 			assert.Equal(t, tt.isUser, m.isUser)
@@ -80,10 +69,6 @@ func TestNewModel(t *testing.T) {
 	}
 }
 
-func TestNewModel_PanicsOnWrongData(t *testing.T) {
-	assert.Panics(t, func() { NewModel("not an org key", 80, 24) })
-}
-
 func TestModel_SetDimensions(t *testing.T) {
 	m := newOrgModel()
 
@@ -94,61 +79,142 @@ func TestModel_SetDimensions(t *testing.T) {
 	assert.Equal(t, 120, m.help.Width())
 }
 
-func TestModel_Init(t *testing.T) {
-	m := newOrgModel()
-	assert.NotNil(t, m.Init())
-}
+func TestModel_Init_LoadsFirstPage(t *testing.T) {
+	tests := []struct {
+		name string
+		key  shared.OrgKey
+	}{
+		{name: "organization", key: shared.OrgKey{Name: "acme", IsUser: false}},
+		{name: "user", key: shared.OrgKey{Name: "octocat", IsUser: true}},
+	}
 
-func TestModel_Update_OrgQueryMsg(t *testing.T) {
-	m := newOrgModel()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &githubtest.Fake{Repositories: []repo.Repository{{Name: "widgets"}, {Name: "gadgets"}}}
+			m := NewModel(fake, tt.key, 80, 24)
 
-	updated, cmd := m.Update(newOrgQueryMsg("alpha", "bravo"))
+			cmd := m.Init()
 
-	assert.Same(t, m, updated)
-	assert.Equal(t, 2, m.repoCount)
-	assert.InDelta(t, 0.1, m.progress.Percent(), 0.0001)
-	if assert.NotNil(t, cmd) {
-		batch, ok := cmd().(tea.BatchMsg)
-		assert.True(t, ok, "expected a batch of commands")
-		assert.Len(t, batch, 3, "one progress command plus one fetch per repository")
+			if assert.NotNil(t, cmd) {
+				msg, ok := cmd().(repositoryPageMsg)
+				assert.True(t, ok, "expected a repositoryPageMsg")
+				assert.Equal(t, fake.Repositories, msg.Repositories)
+				assert.Equal(t, 2, msg.TotalCount)
+				assert.False(t, msg.HasNextPage)
+			}
+			assert.Equal(t, []githubtest.ListCall{{Login: tt.key.Name, IsUser: tt.key.IsUser, After: ""}}, fake.ListCalls)
+		})
 	}
 }
 
-func TestModel_Update_OrgQueryMsg_NoRepositories(t *testing.T) {
-	m := newOrgModel()
+func TestModel_Init_ReportsErrors(t *testing.T) {
+	fake := &githubtest.Fake{ListErr: errors.New("no such org")}
+	m := NewModel(fake, shared.OrgKey{Name: "acme"}, 80, 24)
 
-	_, cmd := m.Update(newOrgQueryMsg())
+	msg, ok := m.Init()().(shared.ErrorMsg)
 
-	assert.Equal(t, 0, m.repoCount)
-	assert.NotNil(t, cmd, "the progress command should still be returned")
+	assert.True(t, ok, "expected an ErrorMsg")
+	assert.EqualError(t, msg.Err, "no such org")
 }
 
-func TestModel_Update_RepoQueryMsg_Partial(t *testing.T) {
+func TestModel_Update_SinglePage(t *testing.T) {
 	m := newOrgModel()
-	m.Update(newOrgQueryMsg("alpha", "bravo"))
 
-	_, cmd := m.Update(newRepoQueryMsg(repo.Repository{Name: "bravo"}))
+	updated, cmd := m.Update(lastPage(repo.Repository{Name: "zulu"}, repo.Repository{Name: "alpha"}))
 
+	assert.Same(t, m, updated)
 	assert.NotNil(t, cmd)
-	assert.Len(t, m.repos, 1)
-	assert.Less(t, m.progress.Percent(), 1.0)
-	assert.InDelta(t, 0.55, m.progress.Percent(), 0.0001)
-	assert.Empty(t, m.repoList.Items(), "list should not be populated until every repo arrives")
-}
-
-func TestModel_Update_RepoQueryMsg_Complete(t *testing.T) {
-	m := newLoadedModel(repo.Repository{Name: "zulu"}, repo.Repository{Name: "alpha"})
-
+	assert.Equal(t, 2, m.repoCount)
+	assert.Equal(t, 1.0, m.progress.Percent())
 	assert.Len(t, m.repos, 2)
 	assert.Equal(t, "alpha", m.repos[0].Name, "repos should be sorted by name")
 	assert.Equal(t, "zulu", m.repos[1].Name)
-	assert.Equal(t, 1.0, m.progress.Percent())
 
 	items := m.repoList.Items()
 	assert.Len(t, items, 2)
 	assert.Equal(t, shared.SimpleItem("alpha"), items[0])
 	assert.Equal(t, shared.SimpleItem("zulu"), items[1])
 	assert.Equal(t, "Organization: demo ", m.repoList.Title)
+}
+
+func TestModel_Update_PartialPageRequestsNext(t *testing.T) {
+	fake := &githubtest.Fake{}
+	m := NewModel(fake, shared.OrgKey{Name: "acme"}, 80, 24)
+
+	_, cmd := m.Update(repositoryPageMsg(github.RepositoryPage{
+		Repositories: []repo.Repository{{Name: "bravo"}},
+		TotalCount:   4,
+		EndCursor:    "cursor-1",
+		HasNextPage:  true,
+	}))
+
+	assert.Equal(t, 4, m.repoCount)
+	assert.Len(t, m.repos, 1)
+	assert.InDelta(t, 0.25, m.progress.Percent(), 0.0001)
+	assert.Empty(t, m.repoList.Items(), "list should not be populated until every page arrives")
+
+	if assert.NotNil(t, cmd) {
+		batch, ok := cmd().(tea.BatchMsg)
+		assert.True(t, ok, "expected a batch with the progress update and the next page fetch")
+		assert.Len(t, batch, 2)
+		// The second command fetches the next page using the returned cursor.
+		batch[1]()
+		assert.Equal(t, []githubtest.ListCall{{Login: "acme", IsUser: false, After: "cursor-1"}}, fake.ListCalls)
+	}
+}
+
+func TestModel_LoadsAllPagesFromService(t *testing.T) {
+	fake := &githubtest.Fake{
+		Repositories: []repo.Repository{{Name: "delta"}, {Name: "alpha"}, {Name: "charlie"}, {Name: "bravo"}, {Name: "echo"}},
+		PageSize:     2,
+	}
+	m := NewModel(fake, shared.OrgKey{Name: "acme"}, 80, 24)
+
+	// Drive the command loop by hand: run each returned command and feed the
+	// resulting message back until nothing else needs fetching.
+	var run func(cmd tea.Cmd)
+	run = func(cmd tea.Cmd) {
+		if cmd == nil {
+			return
+		}
+		switch msg := cmd().(type) {
+		case tea.BatchMsg:
+			for _, c := range msg {
+				run(c)
+			}
+		case repositoryPageMsg:
+			_, next := m.Update(msg)
+			run(next)
+		}
+	}
+	run(m.Init())
+
+	assert.Equal(t, 5, m.repoCount)
+	assert.Len(t, m.repos, 5)
+	assert.Equal(t, 1.0, m.progress.Percent())
+	assert.Equal(t, []githubtest.ListCall{
+		{Login: "acme", After: ""},
+		{Login: "acme", After: "2"},
+		{Login: "acme", After: "4"},
+	}, fake.ListCalls)
+
+	names := make([]string, len(m.repos))
+	for i, r := range m.repos {
+		names[i] = r.Name
+	}
+	assert.Equal(t, []string{"alpha", "bravo", "charlie", "delta", "echo"}, names)
+	assert.Len(t, m.repoList.Items(), 5)
+}
+
+func TestModel_Update_NoRepositories(t *testing.T) {
+	m := newOrgModel()
+
+	_, cmd := m.Update(lastPage())
+
+	assert.Equal(t, 0, m.repoCount)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, 1.0, m.progress.Percent(), "loading should finish so the empty state is shown")
+	assert.Contains(t, plain(m.View()), "No repositories found")
 }
 
 func TestModel_Update_FiltersMsg(t *testing.T) {
@@ -165,6 +231,16 @@ func TestModel_Update_FiltersMsg(t *testing.T) {
 	items := m.repoList.Items()
 	assert.Len(t, items, 1)
 	assert.Equal(t, shared.SimpleItem("archived"), items[0])
+}
+
+func TestModel_Update_FiltersMsg_BeforeReposLoad(t *testing.T) {
+	m := newOrgModel()
+	filterMap := filters.FilterMap{"Is Archived": filters.NewBoolFilter("Is Archived", true)}
+
+	assert.NotPanics(t, func() { m.Update(filters.FiltersMsg(filterMap)) })
+
+	assert.Equal(t, filterMap, m.filters, "filters should be kept for when the repos arrive")
+	assert.Empty(t, m.repoList.Items())
 }
 
 func TestModel_Update_FiltersMsg_ClearingFiltersRestoresRepos(t *testing.T) {
@@ -205,9 +281,9 @@ func TestModel_Update_FilterKeyOpensFilters(t *testing.T) {
 			_, cmd := m.Update(tea.KeyPressMsg{Code: code, Text: tt.key})
 
 			if assert.NotNil(t, cmd) {
-				next, ok := cmd().(shared.NextMsg)
-				assert.True(t, ok, "expected a NextMsg")
-				assert.Equal(t, m.filters, next.ModelData)
+				open, ok := cmd().(filters.OpenFiltersMsg)
+				assert.True(t, ok, "expected an OpenFiltersMsg")
+				assert.Equal(t, m.filters, open.Filters)
 			}
 		})
 	}
@@ -245,10 +321,23 @@ func TestModel_Update_OtherKeysGoToRepoList(t *testing.T) {
 	assert.Equal(t, 1, m.repoList.Index())
 }
 
+func TestModel_LoadedFraction(t *testing.T) {
+	m := newOrgModel()
+	assert.Equal(t, 1.0, m.loadedFraction(), "nothing to load counts as complete")
+
+	m.repoCount = 4
+	m.repos = []repo.RepoConfig{{Name: "a"}}
+	assert.InDelta(t, 0.25, m.loadedFraction(), 0.0001)
+}
+
 func TestModel_View_WhileLoading(t *testing.T) {
 	m := newOrgModel()
-	m.Update(newOrgQueryMsg("alpha", "bravo"))
-	m.Update(newRepoQueryMsg(repo.Repository{Name: "alpha"}))
+	m.Update(repositoryPageMsg(github.RepositoryPage{
+		Repositories: []repo.Repository{{Name: "alpha"}},
+		TotalCount:   2,
+		EndCursor:    "cursor-1",
+		HasNextPage:  true,
+	}))
 
 	content := plain(m.View())
 
@@ -291,7 +380,7 @@ func TestModel_HeaderView(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := NewModel(tt.key, 80, 24)
+			m := NewModel(&githubtest.Fake{}, tt.key, 80, 24)
 			m.repoCount = tt.repoCount
 
 			assert.Contains(t, plain(m.HeaderView()), tt.want)

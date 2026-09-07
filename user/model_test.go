@@ -1,9 +1,12 @@
 package user
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
+	"gh-reponark/github"
+	"gh-reponark/github/githubtest"
 	"gh-reponark/shared"
 
 	tea "charm.land/bubbletea/v2"
@@ -17,18 +20,19 @@ func plain(v tea.View) string {
 	return ansi.Strip(fmt.Sprint(v.Content))
 }
 
-func newTestQuery(login string, orgs ...string) Query {
-	query := Query{}
-	query.User.Login = login
-	query.User.Url = "https://github.com/" + login
+func newTestUser(login string, orgs ...string) github.User {
+	user := github.User{Login: login, Url: "https://github.com/" + login}
 	for _, org := range orgs {
-		query.User.Organizations.Nodes = append(query.User.Organizations.Nodes,
-			struct {
-				Login string
-				Url   string
-			}{Login: org, Url: "https://github.com/" + org})
+		user.Organizations = append(user.Organizations, github.Organization{
+			Login: org,
+			Url:   "https://github.com/" + org,
+		})
 	}
-	return query
+	return user
+}
+
+func newTestModel() *Model {
+	return NewModel(&githubtest.Fake{}, 80, 24)
 }
 
 func itemTitles(m *Model) []string {
@@ -41,7 +45,7 @@ func itemTitles(m *Model) []string {
 }
 
 func TestNewModel(t *testing.T) {
-	m := NewModel(80, 24)
+	m := newTestModel()
 
 	assert.Equal(t, 80, m.width)
 	assert.Equal(t, 24, m.height)
@@ -51,7 +55,7 @@ func TestNewModel(t *testing.T) {
 }
 
 func TestModel_SetDimensions(t *testing.T) {
-	m := NewModel(80, 24)
+	m := newTestModel()
 
 	m.SetDimensions(120, 40)
 
@@ -60,15 +64,33 @@ func TestModel_SetDimensions(t *testing.T) {
 	assert.Equal(t, 120, m.help.Width())
 }
 
-func TestModel_Init(t *testing.T) {
-	m := NewModel(80, 24)
-	assert.NotNil(t, m.Init())
+func TestModel_Init_LoadsUser(t *testing.T) {
+	fake := &githubtest.Fake{User: newTestUser("octocat", "acme")}
+	m := NewModel(fake, 80, 24)
+
+	cmd := m.Init()
+
+	if assert.NotNil(t, cmd) {
+		msg, ok := cmd().(userLoadedMsg)
+		assert.True(t, ok, "expected a userLoadedMsg")
+		assert.Equal(t, fake.User, github.User(msg))
+	}
 }
 
-func TestModel_SetOrgList(t *testing.T) {
-	m := NewModel(80, 24)
+func TestModel_Init_ReportsErrors(t *testing.T) {
+	fake := &githubtest.Fake{UserErr: errors.New("not logged in")}
+	m := NewModel(fake, 80, 24)
 
-	m.SetOrgList(newTestQuery("octocat", "zulu", "alpha", "mike"))
+	msg, ok := m.Init()().(shared.ErrorMsg)
+
+	assert.True(t, ok, "expected an ErrorMsg")
+	assert.EqualError(t, msg.Err, "not logged in")
+}
+
+func TestModel_SetUser(t *testing.T) {
+	m := newTestModel()
+
+	m.SetUser(newTestUser("octocat", "zulu", "alpha", "mike"))
 
 	assert.Equal(t, "octocat", m.login)
 	assert.Equal(t, []string{"octocat", "alpha", "mike", "zulu"}, itemTitles(m),
@@ -78,18 +100,18 @@ func TestModel_SetOrgList(t *testing.T) {
 	assert.Equal(t, "https://github.com/octocat", first.Description())
 }
 
-func TestModel_SetOrgList_NoOrganizations(t *testing.T) {
-	m := NewModel(80, 24)
+func TestModel_SetUser_NoOrganizations(t *testing.T) {
+	m := newTestModel()
 
-	m.SetOrgList(newTestQuery("octocat"))
+	m.SetUser(newTestUser("octocat"))
 
 	assert.Equal(t, []string{"octocat"}, itemTitles(m))
 }
 
-func TestModel_Update_QueryCompleteMsg(t *testing.T) {
-	m := NewModel(80, 24)
+func TestModel_Update_UserLoadedMsg(t *testing.T) {
+	m := newTestModel()
 
-	updated, cmd := m.Update(queryCompleteMsg(newTestQuery("octocat", "acme")))
+	updated, cmd := m.Update(userLoadedMsg(newTestUser("octocat", "acme")))
 
 	assert.Same(t, m, updated)
 	assert.Nil(t, cmd)
@@ -98,7 +120,7 @@ func TestModel_Update_QueryCompleteMsg(t *testing.T) {
 }
 
 func TestModel_Update_EnterWithoutItems(t *testing.T) {
-	m := NewModel(80, 24)
+	m := newTestModel()
 
 	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
@@ -117,8 +139,8 @@ func TestModel_Update_EnterSelectsOrgKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := NewModel(80, 24)
-			m.SetOrgList(newTestQuery("octocat", "acme"))
+			m := newTestModel()
+			m.SetUser(newTestUser("octocat", "acme"))
 
 			for i := 0; i < tt.downCount; i++ {
 				m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
@@ -126,17 +148,17 @@ func TestModel_Update_EnterSelectsOrgKey(t *testing.T) {
 
 			_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 			if assert.NotNil(t, cmd) {
-				next, ok := cmd().(shared.NextMsg)
-				assert.True(t, ok, "expected a NextMsg")
-				assert.Equal(t, tt.want, next.ModelData)
+				open, ok := cmd().(shared.OpenOrgMsg)
+				assert.True(t, ok, "expected an OpenOrgMsg")
+				assert.Equal(t, tt.want, open.Key)
 			}
 		})
 	}
 }
 
 func TestModel_Update_OtherKeysGoToList(t *testing.T) {
-	m := NewModel(80, 24)
-	m.SetOrgList(newTestQuery("octocat", "acme"))
+	m := newTestModel()
+	m.SetUser(newTestUser("octocat", "acme"))
 	assert.Equal(t, 0, m.orgList.Index())
 
 	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
@@ -147,8 +169,8 @@ func TestModel_Update_OtherKeysGoToList(t *testing.T) {
 }
 
 func TestModel_Update_NonKeyMessagesGoToList(t *testing.T) {
-	m := NewModel(80, 24)
-	m.SetOrgList(newTestQuery("octocat", "acme"))
+	m := newTestModel()
+	m.SetUser(newTestUser("octocat", "acme"))
 
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 10, Height: 10})
 
@@ -157,8 +179,8 @@ func TestModel_Update_NonKeyMessagesGoToList(t *testing.T) {
 }
 
 func TestModel_View(t *testing.T) {
-	m := NewModel(80, 24)
-	m.SetOrgList(newTestQuery("octocat", "acme"))
+	m := newTestModel()
+	m.SetUser(newTestUser("octocat", "acme"))
 
 	content := plain(m.View())
 
@@ -167,20 +189,20 @@ func TestModel_View(t *testing.T) {
 }
 
 func TestModel_View_ZeroHeight(t *testing.T) {
-	m := NewModel(80, 0)
+	m := NewModel(&githubtest.Fake{}, 80, 0)
 	assert.NotPanics(t, func() { m.View() })
 }
 
 func TestModel_HeaderView(t *testing.T) {
-	m := NewModel(80, 24)
+	m := newTestModel()
 	assert.Contains(t, plain(m.HeaderView()), "Organizations")
 
-	m.SetOrgList(newTestQuery("octocat"))
+	m.SetUser(newTestUser("octocat"))
 	assert.Contains(t, plain(m.HeaderView()), "User: octocat")
 }
 
 func TestModel_HelpView(t *testing.T) {
-	m := NewModel(80, 24)
+	m := newTestModel()
 
 	content := plain(m.HelpView())
 

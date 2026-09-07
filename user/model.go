@@ -4,21 +4,20 @@ import (
 	"fmt"
 	"sort"
 
+	"gh-reponark/github"
 	"gh-reponark/shared"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
-	"github.com/cli/go-gh/v2/pkg/api"
-	graphql "github.com/cli/shurcooL-graphql"
 )
 
-type AuthenticationErrorMsg struct{ Err error }
-type ErrMsg struct{ Err error }
-type queryCompleteMsg Query
+// userLoadedMsg carries the authenticated user once the API call completes.
+type userLoadedMsg github.User
 
 type Model struct {
+	svc     github.Service
 	login   string
 	orgList list.Model
 	width   int
@@ -27,7 +26,7 @@ type Model struct {
 	keymap  userKeyMap
 }
 
-func NewModel(width, height int) *Model {
+func NewModel(svc github.Service, width, height int) *Model {
 	list := list.New([]list.Item{}, shared.DefaultDelegate, width, height)
 
 	list.SetStatusBarItemName("Organization", "Organizations")
@@ -39,7 +38,7 @@ func NewModel(width, height int) *Model {
 	helpModel := shared.NewHelpModel(width)
 	keymap := userKeyMap{}
 
-	return &Model{orgList: list, width: width, height: height, help: helpModel, keymap: keymap}
+	return &Model{svc: svc, orgList: list, width: width, height: height, help: helpModel, keymap: keymap}
 }
 
 func (m *Model) SetDimensions(width, height int) {
@@ -48,14 +47,24 @@ func (m *Model) SetDimensions(width, height int) {
 	m.help.SetWidth(width)
 }
 
-func (m Model) Init() tea.Cmd {
-	return getUser
+func (m *Model) Init() tea.Cmd {
+	return m.loadUser
 }
 
-func (m *Model) SetOrgList(query Query) {
-	m.login = query.User.Login
-	items := make([]list.Item, len(query.User.Organizations.Nodes))
-	for i, org := range query.User.Organizations.Nodes {
+// loadUser fetches the authenticated user and their organizations.
+func (m *Model) loadUser() tea.Msg {
+	user, err := m.svc.CurrentUser()
+	if err != nil {
+		return shared.ErrorMsg{Err: err}
+	}
+	return userLoadedMsg(user)
+}
+
+// SetUser populates the list with the user followed by their organizations.
+func (m *Model) SetUser(user github.User) {
+	m.login = user.Login
+	items := make([]list.Item, len(user.Organizations))
+	for i, org := range user.Organizations {
 		items[i] = shared.NewListItem(org.Login, org.Url)
 	}
 
@@ -65,7 +74,7 @@ func (m *Model) SetOrgList(query Query) {
 
 	// Add the user to the top of the list
 	// They're not an organization but they also have repositories
-	userItem := shared.NewListItem(m.login, query.User.Url)
+	userItem := shared.NewListItem(m.login, user.Url)
 	items = append([]list.Item{userItem}, items...)
 	m.orgList.SetItems(items)
 }
@@ -74,8 +83,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	case queryCompleteMsg:
-		m.SetOrgList(Query(msg))
+	case userLoadedMsg:
+		m.SetUser(github.User(msg))
 
 		return m, cmd
 	case tea.KeyPressMsg:
@@ -88,7 +97,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						Name:   item.Title(),
 						IsUser: isUser,
 					}
-					return shared.NextMsg{ModelData: orgKey}
+					return shared.OpenOrgMsg{Key: orgKey}
 				}
 			}
 			return m, cmd
@@ -137,44 +146,4 @@ func (k userKeyMap) ShortHelp() []key.Binding {
 
 func (k userKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{k.ShortHelp()}
-}
-
-func getUser() tea.Msg {
-	login, err := getLogin()
-	if err != nil {
-		return AuthenticationErrorMsg{Err: err}
-	}
-
-	client, err := api.DefaultGraphQLClient()
-	if err != nil {
-		return ErrMsg{Err: err}
-	}
-
-	var userQuery = Query{}
-
-	variables := map[string]interface{}{
-		"login": graphql.String(login),
-		"first": graphql.Int(100),
-	}
-	err = client.Query("User", &userQuery, variables)
-	if err != nil {
-		return ErrMsg{Err: err}
-	}
-
-	return queryCompleteMsg(userQuery)
-}
-
-func getLogin() (string, error) {
-	client, err := api.DefaultRESTClient()
-	if err != nil {
-		return "", err
-	}
-	response := User{}
-
-	err = client.Get("user", &response)
-	if err != nil {
-		return "", err
-	}
-
-	return response.Login, nil
 }

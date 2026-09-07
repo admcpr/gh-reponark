@@ -2,10 +2,10 @@ package org
 
 import (
 	"fmt"
-	"log"
 	"sort"
 
 	"gh-reponark/filters"
+	"gh-reponark/github"
 	"gh-reponark/repo"
 	"gh-reponark/shared"
 
@@ -15,15 +15,14 @@ import (
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/cli/go-gh/v2/pkg/api"
-	graphql "github.com/cli/shurcooL-graphql"
 )
 
-type ApiErrorMsg struct{ Err error }
-type orgQueryMsg Query
-type repoQueryMsg repo.Query
+// repositoryPageMsg carries one page of repositories with their configuration.
+type repositoryPageMsg github.RepositoryPage
 
 type Model struct {
+	svc github.Service
+
 	Title     string
 	repoCount int
 	repos     []repo.RepoConfig
@@ -41,12 +40,12 @@ type Model struct {
 	progress progress.Model
 }
 
-func NewModel(modelData interface{}, width, height int) *Model {
-	orgKey := modelData.(shared.OrgKey)
+func NewModel(svc github.Service, orgKey shared.OrgKey, width, height int) *Model {
 	help := shared.NewHelpModel(width)
 	keymap := orgKeyMap{}
 
 	return &Model{
+		svc:       svc,
 		Title:     orgKey.Name,
 		isUser:    orgKey.IsUser,
 		width:     width,
@@ -80,39 +79,56 @@ func (m *Model) populateRepoList() {
 	list.SetShowTitle(true)
 
 	m.repoList = list
-	m.repoModel.SelectRepo(m.repos[m.repoList.Index()])
+	if len(m.repos) > 0 {
+		m.repoModel.SelectRepo(m.repos[m.repoList.Index()])
+	}
 }
 
 func (m *Model) Init() tea.Cmd {
-	return getRepoList(m.Title, m.isUser)
+	return m.loadRepositories("")
+}
+
+// loadRepositories returns a command that fetches one page of repositories,
+// starting after the given cursor.
+func (m *Model) loadRepositories(after string) tea.Cmd {
+	return func() tea.Msg {
+		page, err := m.svc.ListRepositories(m.Title, m.isUser, after)
+		if err != nil {
+			return shared.ErrorMsg{Err: err}
+		}
+		return repositoryPageMsg(page)
+	}
+}
+
+// loadedFraction is how much of the listing has arrived, for the progress bar.
+func (m *Model) loadedFraction() float64 {
+	if m.repoCount <= 0 {
+		return 1.0
+	}
+	return float64(len(m.repos)) / float64(m.repoCount)
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	case orgQueryMsg:
-		repos := msg.GetCommonFields().Repositories.Nodes
-		cmds := []tea.Cmd{m.progress.SetPercent(0.1)}
-		m.repoCount = len(msg.GetCommonFields().Repositories.Nodes)
-		for _, repo := range repos {
-			cmds = append(cmds, getRepoDetails(m.Title, repo.Name))
+	case repositoryPageMsg:
+		m.repoCount = msg.TotalCount
+		for _, repository := range msg.Repositories {
+			m.repos = append(m.repos, repo.NewRepoConfig(repository))
 		}
-		return m, tea.Batch(cmds...)
 
-	case repoQueryMsg:
-		m.repos = append(m.repos, repo.NewRepoConfig(msg.Repository))
+		if msg.HasNextPage {
+			return m, tea.Batch(m.progress.SetPercent(m.loadedFraction()), m.loadRepositories(msg.EndCursor))
+		}
 
-		if m.repoCount == len(m.repos) {
-			sort.Slice(m.repos, func(i, j int) bool {
-				return m.repos[i].Name < m.repos[j].Name
-			})
+		sort.Slice(m.repos, func(i, j int) bool {
+			return m.repos[i].Name < m.repos[j].Name
+		})
+		if len(m.repos) > 0 {
 			m.populateRepoList()
-			cmd = m.progress.SetPercent(1.0)
-		} else {
-			cmd = m.progress.IncrPercent(0.9 / float64(m.repoCount))
 		}
-		return m, cmd
+		return m, m.progress.SetPercent(1.0)
 
 	case filters.FiltersMsg:
 		m.filters = filters.FilterMap(msg)
@@ -128,7 +144,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "F", "f":
 			return m, func() tea.Msg {
-				return shared.NextMsg{ModelData: m.filters}
+				return filters.OpenFiltersMsg{Filters: m.filters}
 			}
 		case "esc":
 			return m, func() tea.Msg {
@@ -198,60 +214,6 @@ func (m *Model) ProgressView() tea.View {
 	m.progress.SetWidth(m.width)
 	text := fmt.Sprintf("Getting repositories ... %d of %d\n", len(m.repos), m.repoCount)
 	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Center, text, m.progress.View())))
-}
-
-func getRepoDetails(owner string, name string) tea.Cmd {
-	return func() tea.Msg {
-		client, err := api.DefaultGraphQLClient()
-		if err != nil {
-			log.Fatal(err)
-		}
-		repoQuery := repo.Query{}
-
-		variables := map[string]interface{}{
-			"owner": graphql.String(owner),
-			"name":  graphql.String(name),
-		}
-		err = client.Query("Repository", &repoQuery, variables)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		return repoQueryMsg(repoQuery)
-	}
-}
-
-func getRepoList(login string, isUser bool) tea.Cmd {
-	return func() tea.Msg {
-		client, err := api.DefaultGraphQLClient()
-		if err != nil {
-			return ApiErrorMsg{Err: err}
-		}
-
-		variables := map[string]interface{}{
-			"login": graphql.String(login),
-			"first": graphql.Int(100),
-		}
-
-		query, err := queryRepositories(client, isUser, variables)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		return orgQueryMsg(query)
-	}
-}
-
-func queryRepositories(client *api.GraphQLClient, isUser bool, variables map[string]interface{}) (Query, error) {
-	if isUser {
-		query := UserQuery{}
-		err := client.Query("UserRepositories", &query, variables)
-		return query, err
-	} else {
-		query := OrgQuery{}
-		err := client.Query("OrganizationRepositories", &query, variables)
-		return query, err
-	}
 }
 
 type orgKeyMap struct{}

@@ -2,10 +2,6 @@ package repo
 
 import "time"
 
-type Query struct {
-	Repository Repository `graphql:"repository(owner: $owner, name: $name)"`
-}
-
 type Repository struct {
 	// Overview
 	Id              string `graphql:"id" group:"1⟭ Overview" desc:"The Node ID of the Repository."`

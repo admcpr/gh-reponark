@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"gh-reponark/filters"
+	"gh-reponark/github"
 	"gh-reponark/org"
 	"gh-reponark/shared"
 	"gh-reponark/user"
@@ -14,21 +15,18 @@ import (
 )
 
 type MainModel struct {
+	svc    github.Service
 	nav    shared.Navigator
 	width  int
 	height int
 }
 
-func NewMainModel() MainModel {
+func NewMainModel(svc github.Service) MainModel {
 	nav := shared.NewNavigator()
-	nav.SetValidator(validateTransition)
-	_ = nav.Push(user.NewModel(0, 0))
-	// stack.Push(filters.NewBoolModel("Is something true", false, 0, 0))
-	// stack.Push(NewDateModel("Date between", time.Now(), time.Now().Add(time.Hour*24*7), 0, 0))
-	// stack.Push(NewIntModel("Number between", 0, 100, 0, 0))
-	// stack.Push(filters.NewModel(0, 0))
+	nav.Push(user.NewModel(svc, 0, 0))
 
 	return MainModel{
+		svc: svc,
 		nav: nav,
 	}
 }
@@ -43,14 +41,16 @@ func (m MainModel) Init() tea.Cmd {
 	return child.Init()
 }
 
+// Update routes messages. Navigation requests are typed messages emitted by
+// the screens themselves, so every transition is visible in this one switch:
+//
+//	user  --OpenOrgMsg-->      org
+//	org   --OpenFiltersMsg-->  filters
+//	filters --EditFilterMsg--> filter editor (bool/int/date/string)
+//	any   --ErrorMsg-->        error screen
+//	any   --PreviousMsg-->     back
 func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// This should only do a couple of things
-	// 1. Handle ctrl+c to quit ✔️
-	// 2. Handle window sizing ✔️
-	// 3. Handle Forward & Back navigation (creating models as needed) and updating state ✔️
-	// 4. Call Update on the active model ✔️
-
-	var cmd tea.Cmd
+	contentWidth, contentHeight := m.contentDimensions()
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -58,30 +58,41 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "ctrl+c":
+		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
-		default:
-			cmd = m.UpdateChild(msg)
 		}
-	case shared.NextMsg:
-		cmd = m.Next(msg)
-		return m, cmd
-	case shared.PreviousMsg:
-		cmd = m.Previous(msg)
-		return m, cmd
-	default:
-		cmd = m.UpdateChild(msg)
-	}
+		return m, m.UpdateChild(msg)
 
-	return m, cmd
+	case shared.OpenOrgMsg:
+		return m, m.open(org.NewModel(m.svc, msg.Key, contentWidth, contentHeight))
+
+	case filters.OpenFiltersMsg:
+		return m, m.open(filters.NewModel(msg.Filters, contentWidth, contentHeight))
+
+	case filters.EditFilterMsg:
+		editor := filters.NewFilterModel(msg.Property, contentWidth, contentHeight)
+		if editor == nil {
+			// The property type has no editor; stay where we are.
+			return m, nil
+		}
+		return m, m.open(editor)
+
+	case shared.PreviousMsg:
+		return m, m.Previous(msg)
+
+	case shared.ErrorMsg:
+		return m, m.ShowError(msg.Err)
+
+	default:
+		return m, m.UpdateChild(msg)
+	}
 }
 
 func (m *MainModel) UpdateChild(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	currentModel, _ := m.nav.Pop()
 	currentModel, cmd = currentModel.Update(msg)
-	_ = m.nav.Push(currentModel)
+	m.nav.Push(currentModel)
 	return cmd
 }
 
@@ -119,45 +130,33 @@ func (m MainModel) View() tea.View {
 	return v
 }
 
-func (m *MainModel) Next(message shared.NextMsg) tea.Cmd {
-	contentWidth, contentHeight := m.contentDimensions()
-	var newModel tea.Model
-	head, _ := m.nav.Current()
-
-	switch head.(type) {
-	case *user.Model:
-		newModel = org.NewModel(message.ModelData, contentWidth, contentHeight)
-	case *org.Model:
-		newModel = filters.NewModel(message.ModelData, contentWidth, contentHeight)
-	case *filters.Model:
-		newModel = filters.NewFilterModel(message.ModelData, contentWidth, contentHeight)
-	}
-
-	if newModel == nil {
-		return nil
-	}
-
-	cmd := newModel.Init()
-	if err := m.nav.Push(newModel); err != nil {
-		// Transition not allowed; ignore the navigation request.
-		return nil
-	}
-
+// open initialises a new screen and makes it the current one.
+func (m *MainModel) open(screen tea.Model) tea.Cmd {
+	cmd := screen.Init()
+	m.nav.Push(screen)
 	return cmd
 }
 
+// Previous returns to the screen below the current one. Going back from the
+// first screen quits, so the navigator is never left empty.
 func (m *MainModel) Previous(message shared.PreviousMsg) tea.Cmd {
-	_, err := m.nav.Pop()
-
-	if err != nil {
+	if m.nav.Len() <= 1 {
 		return tea.Quit
 	}
+	_, _ = m.nav.Pop()
 
 	if message.Message != nil {
 		return m.UpdateChild(message.Message)
 	}
 
 	return nil
+}
+
+// ShowError pushes an error screen on top of the current one. Going back from
+// it returns to the screen that reported the error.
+func (m *MainModel) ShowError(err error) tea.Cmd {
+	contentWidth, contentHeight := m.contentDimensions()
+	return m.open(shared.NewErrorModel(err, contentWidth, contentHeight))
 }
 
 func viewContent(v tea.View) string {
@@ -198,38 +197,6 @@ func (m MainModel) renderFooter(model tea.Model) string {
 	}
 	return footerStyle.Foreground(shared.AppColors.BrightBlack).
 		Render("esc: back | ctrl+c: quit")
-}
-
-// validateTransition restricts navigation order between screens.
-func validateTransition(current, next tea.Model) error {
-	switch current.(type) {
-	case *user.Model:
-		if _, ok := next.(*org.Model); ok {
-			return nil
-		}
-	case *org.Model:
-		if _, ok := next.(*filters.Model); ok {
-			return nil
-		}
-	case *filters.Model:
-		if isFilterDetail(next) {
-			return nil
-		}
-	case *filters.BoolModel, *filters.IntModel, *filters.DateModel, *filters.StringModel:
-		// From detail models, allow any next (they should navigate back via Previous)
-		return nil
-	}
-
-	return fmt.Errorf("invalid transition %T -> %T", current, next)
-}
-
-func isFilterDetail(m tea.Model) bool {
-	switch m.(type) {
-	case *filters.BoolModel, *filters.IntModel, *filters.DateModel, *filters.StringModel:
-		return true
-	default:
-		return false
-	}
 }
 
 type layoutParts struct {
