@@ -101,3 +101,7 @@ func (s *IntFilterSuite) TestMatches() {
 func TestIntFilterSuite(t *testing.T) {
 	suite.Run(t, new(IntFilterSuite))
 }
+
+func (s *IntFilterSuite) TestString() {
+	s.Equal("test between 1 and 100", s.filter.String())
+}

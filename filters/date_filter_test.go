@@ -108,3 +108,7 @@ func (s *DateFilterSuite) TestMatches() {
 func TestDateFilterSuite(t *testing.T) {
 	suite.Run(t, new(DateFilterSuite))
 }
+
+func (s *DateFilterSuite) TestString() {
+	s.Equal("test between 2024-01-01 and 2024-02-01", s.filter.String())
+}
