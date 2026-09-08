@@ -2,6 +2,7 @@ package github
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -44,7 +45,8 @@ func (f *fakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	status, body := f.handler(req, gql)
 	return &http.Response{
 		StatusCode: status,
-		Status:     http.StatusText(status),
+		// Real servers send the code and the text, e.g. "504 Gateway Timeout".
+		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Request:    req,
@@ -74,24 +76,24 @@ func graphqlError(message string) string {
 	return `{"data":null,"errors":[{"message":"` + message + `"}]}`
 }
 
-// repositoriesResponse builds a repositories connection response under root.
-func repositoriesResponse(root string, totalCount int, hasNextPage bool, endCursor string, nodes ...string) string {
-	return `{"data":{"` + root + `":{"repositories":{` +
-		`"totalCount":` + itoa(totalCount) + `,` +
-		`"pageInfo":{"hasNextPage":` + boolString(hasNextPage) + `,"endCursor":"` + endCursor + `"},` +
-		`"nodes":[` + strings.Join(nodes, ",") + `]}}}}`
-}
-
-func itoa(n int) string {
-	b, _ := json.Marshal(n)
-	return string(b)
-}
-
 func boolString(b bool) string {
 	if b {
 		return "true"
 	}
 	return "false"
+}
+
+// namesResponse builds a repository names connection response under root.
+func namesResponse(root string, totalCount int, hasNextPage bool, endCursor string, names ...string) string {
+	nodes := make([]string, len(names))
+	for i, name := range names {
+		nodes[i] = `{"name":"` + name + `","url":"https://github.com/acme/` + name + `"}`
+	}
+	total, _ := json.Marshal(totalCount)
+	return `{"data":{"` + root + `":{"repositories":{` +
+		`"totalCount":` + string(total) + `,` +
+		`"pageInfo":{"hasNextPage":` + boolString(hasNextPage) + `,"endCursor":"` + endCursor + `"},` +
+		`"nodes":[` + strings.Join(nodes, ",") + `]}}}}`
 }
 
 func TestClient_CurrentUser(t *testing.T) {
@@ -193,35 +195,21 @@ func TestClient_ListRepositories(t *testing.T) {
 				if !isOperation(gql, tt.wantOperation) {
 					return http.StatusBadRequest, graphqlError("unexpected operation")
 				}
-				return http.StatusOK, repositoriesResponse(tt.wantRoot, 2, false, "cursor-2",
-					`{"name":"widgets","nameWithOwner":"acme/widgets","isArchived":true,"stargazerCount":42,
-					  "createdAt":"2024-03-04T05:06:07Z","primaryLanguage":{"name":"Go"},
-					  "issues":{"totalCount":3},"defaultBranchRef":{"name":"main"}}`,
-					`{"name":"gadgets","nameWithOwner":"acme/gadgets","isPrivate":true}`,
-				)
+				return http.StatusOK, namesResponse(tt.wantRoot, 2, false, "cursor-2", "widgets", "gadgets")
 			})
 
 			page, err := client.ListRepositories("acme", tt.isUser, "")
 
 			require.NoError(t, err)
-			assert.Equal(t, 2, page.TotalCount)
-			assert.False(t, page.HasNextPage)
-			assert.Equal(t, "cursor-2", page.EndCursor)
-			require.Len(t, page.Repositories, 2)
-
-			widgets := page.Repositories[0]
-			assert.Equal(t, "widgets", widgets.Name)
-			assert.Equal(t, "acme/widgets", widgets.NameWithOwner)
-			assert.True(t, widgets.IsArchived)
-			assert.Equal(t, 42, widgets.StargazerCount)
-			assert.Equal(t, time.Date(2024, 3, 4, 5, 6, 7, 0, time.UTC), widgets.CreatedAt)
-			assert.Equal(t, "Go", widgets.PrimaryLanguage.Name)
-			assert.Equal(t, 3, widgets.Issues.TotalCount)
-			assert.Equal(t, "main", widgets.DefaultBranchRef.Name)
-
-			gadgets := page.Repositories[1]
-			assert.Equal(t, "gadgets", gadgets.Name)
-			assert.True(t, gadgets.IsPrivate)
+			assert.Equal(t, RepositoryPage{
+				Repositories: []RepositoryRef{
+					{Name: "widgets", Url: "https://github.com/acme/widgets"},
+					{Name: "gadgets", Url: "https://github.com/acme/gadgets"},
+				},
+				TotalCount:  2,
+				EndCursor:   "cursor-2",
+				HasNextPage: false,
+			}, page)
 
 			require.Len(t, transport.graphql, 1)
 			query := transport.graphql[0].Query
@@ -229,7 +217,8 @@ func TestClient_ListRepositories(t *testing.T) {
 			assert.Contains(t, query, "repositories(first: $first, after: $after, affiliations: OWNER)")
 			assert.Contains(t, query, "totalCount")
 			assert.Contains(t, query, "pageInfo{hasNextPage,endCursor}")
-			assert.Contains(t, query, "isArchived", "the full repository configuration should be requested")
+			assert.Contains(t, query, "nodes{name,url}")
+			assert.NotContains(t, query, "isArchived", "the listing must stay cheap; configuration is fetched separately")
 			assert.Contains(t, query, "$after:String")
 			assert.NotContains(t, query, "$after:String!", "the cursor must be nullable so the first page can pass null")
 
@@ -245,11 +234,9 @@ func TestClient_ListRepositories(t *testing.T) {
 func TestClient_ListRepositories_Pagination(t *testing.T) {
 	client, transport := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
 		if gql.Variables["after"] == nil {
-			return http.StatusOK, repositoriesResponse("organization", 3, true, "cursor-2",
-				`{"name":"alpha"}`, `{"name":"bravo"}`)
+			return http.StatusOK, namesResponse("organization", 3, true, "cursor-2", "alpha", "bravo")
 		}
-		return http.StatusOK, repositoriesResponse("organization", 3, false, "cursor-3",
-			`{"name":"charlie"}`)
+		return http.StatusOK, namesResponse("organization", 3, false, "cursor-3", "charlie")
 	})
 
 	first, err := client.ListRepositories("acme", false, "")
@@ -272,7 +259,7 @@ func TestClient_ListRepositories_Pagination(t *testing.T) {
 
 func TestClient_ListRepositories_Empty(t *testing.T) {
 	client, _ := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
-		return http.StatusOK, repositoriesResponse("organization", 0, false, "")
+		return http.StatusOK, namesResponse("organization", 0, false, "")
 	})
 
 	page, err := client.ListRepositories("acme", false, "")
@@ -307,6 +294,94 @@ func TestClient_ListRepositories_Error(t *testing.T) {
 			assert.Contains(t, err.Error(), "Could not resolve to a User")
 		})
 	}
+}
+
+func TestClient_GetRepositories(t *testing.T) {
+	client, transport := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
+		if !isOperation(gql, "Repositories") {
+			return http.StatusBadRequest, graphqlError("unexpected operation")
+		}
+		return http.StatusOK, `{"data":{
+			"repo0":{"name":"widgets","nameWithOwner":"acme/widgets","isArchived":true,"stargazerCount":42,
+			         "createdAt":"2024-03-04T05:06:07Z","primaryLanguage":{"name":"Go"},
+			         "issues":{"totalCount":3},"pullRequests":{"totalCount":2},"defaultBranchRef":{"name":"main"}},
+			"repo1":{"name":"gadgets","nameWithOwner":"acme/gadgets","isPrivate":true}
+		}}`
+	})
+
+	repositories, err := client.GetRepositories("acme", []string{"widgets", "gadgets"})
+
+	require.NoError(t, err)
+	require.Len(t, repositories, 2)
+
+	widgets := repositories[0]
+	assert.Equal(t, "widgets", widgets.Name)
+	assert.Equal(t, "acme/widgets", widgets.NameWithOwner)
+	assert.True(t, widgets.IsArchived)
+	assert.Equal(t, 42, widgets.StargazerCount)
+	assert.Equal(t, time.Date(2024, 3, 4, 5, 6, 7, 0, time.UTC), widgets.CreatedAt)
+	assert.Equal(t, "Go", widgets.PrimaryLanguage.Name)
+	assert.Equal(t, 3, widgets.Issues.TotalCount)
+	assert.Equal(t, 2, widgets.OpenPullRequests.TotalCount)
+	assert.Equal(t, "main", widgets.DefaultBranchRef.Name)
+
+	gadgets := repositories[1]
+	assert.Equal(t, "gadgets", gadgets.Name)
+	assert.True(t, gadgets.IsPrivate)
+
+	require.Len(t, transport.graphql, 1)
+	query := transport.graphql[0].Query
+	assert.Contains(t, query, "repo0: repository(owner: $owner, name: $name0){")
+	assert.Contains(t, query, "repo1: repository(owner: $owner, name: $name1){")
+	assert.Contains(t, query, "isArchived", "the full repository configuration should be requested")
+	assert.Contains(t, query, "pullRequests(states: OPEN){totalCount}")
+	assert.Equal(t, 2, strings.Count(query, "repository(owner: $owner"), "one aliased field per name")
+
+	variables := transport.graphql[0].Variables
+	assert.Equal(t, "acme", variables["owner"])
+	assert.Equal(t, "widgets", variables["name0"])
+	assert.Equal(t, "gadgets", variables["name1"])
+}
+
+func TestClient_GetRepositories_PreservesRequestOrder(t *testing.T) {
+	client, _ := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
+		// Respond with the aliases out of order; decoding is by alias, not position.
+		return http.StatusOK, `{"data":{"repo2":{"name":"charlie"},"repo0":{"name":"alpha"},"repo1":{"name":"bravo"}}}`
+	})
+
+	repositories, err := client.GetRepositories("acme", []string{"alpha", "bravo", "charlie"})
+
+	require.NoError(t, err)
+	names := make([]string, len(repositories))
+	for i, r := range repositories {
+		names[i] = r.Name
+	}
+	assert.Equal(t, []string{"alpha", "bravo", "charlie"}, names)
+}
+
+func TestClient_GetRepositories_Empty(t *testing.T) {
+	client, transport := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
+		return http.StatusInternalServerError, "should not be called"
+	})
+
+	repositories, err := client.GetRepositories("acme", nil)
+
+	require.NoError(t, err)
+	assert.NotNil(t, repositories)
+	assert.Empty(t, repositories)
+	assert.Empty(t, transport.requests, "no request should be made for an empty batch")
+}
+
+func TestClient_GetRepositories_Error(t *testing.T) {
+	client, _ := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
+		return http.StatusGatewayTimeout, `{"message": "We couldn't respond to your request in time."}`
+	})
+
+	_, err := client.GetRepositories("acme", []string{"widgets", "gadgets"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fetching 2 repositories for acme")
+	assert.Contains(t, err.Error(), "504")
 }
 
 func TestClient_ImplementsService(t *testing.T) {

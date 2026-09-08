@@ -1,7 +1,5 @@
 package github
 
-import "gh-reponark/repo"
-
 // currentUserResponse is the subset of the REST /user response we read.
 type currentUserResponse struct {
 	Login string `json:"login"`
@@ -20,25 +18,29 @@ type userQuery struct {
 	} `graphql:"user(login: $login)"`
 }
 
-// repositoryConnection is a page of repositories with their full
-// configuration, as described by repo.Repository's graphql tags.
-type repositoryConnection struct {
+// repositoryNameConnection is a page of repository names. It deliberately asks
+// for nothing expensive so a page of 100 stays fast; configurations are
+// fetched separately in small batches.
+type repositoryNameConnection struct {
 	TotalCount int `graphql:"totalCount"`
 	PageInfo   struct {
 		HasNextPage bool   `graphql:"hasNextPage"`
 		EndCursor   string `graphql:"endCursor"`
 	} `graphql:"pageInfo"`
-	Nodes []repo.Repository `graphql:"nodes"`
+	Nodes []struct {
+		Name string
+		Url  string
+	} `graphql:"nodes"`
 }
 
 type organizationRepositoriesQuery struct {
 	Organization struct {
-		Repositories repositoryConnection `graphql:"repositories(first: $first, after: $after, affiliations: OWNER)"`
+		Repositories repositoryNameConnection `graphql:"repositories(first: $first, after: $after, affiliations: OWNER)"`
 	} `graphql:"organization(login: $login)"`
 }
 
 type userRepositoriesQuery struct {
 	User struct {
-		Repositories repositoryConnection `graphql:"repositories(first: $first, after: $after, affiliations: OWNER)"`
+		Repositories repositoryNameConnection `graphql:"repositories(first: $first, after: $after, affiliations: OWNER)"`
 	} `graphql:"user(login: $login)"`
 }

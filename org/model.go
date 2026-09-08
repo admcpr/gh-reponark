@@ -17,8 +17,16 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// repositoryPageMsg carries one page of repositories with their configuration.
+// maxConcurrentBatches bounds how many configuration requests are in flight
+// at once, so a large organization does not trip GitHub's secondary rate
+// limits while still loading several batches in parallel.
+const maxConcurrentBatches = 4
+
+// repositoryPageMsg carries one page of repository names.
 type repositoryPageMsg github.RepositoryPage
+
+// repositoryBatchMsg carries the configuration of one batch of repositories.
+type repositoryBatchMsg []repo.Repository
 
 type Model struct {
 	svc github.Service
@@ -28,6 +36,12 @@ type Model struct {
 	repos     []repo.RepoConfig
 	filters   filters.FilterMap
 	isUser    bool
+
+	// Loading state: names collected from the listing, batches of names not
+	// yet requested, and how many batch requests are outstanding.
+	names    []string
+	pending  [][]string
+	inFlight int
 
 	help      help.Model
 	keymap    orgKeyMap
@@ -114,12 +128,12 @@ func (m *Model) selectedRepo() (repo.RepoConfig, bool) {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return m.loadRepositories("")
+	return m.loadRepositoryPage("")
 }
 
-// loadRepositories returns a command that fetches one page of repositories,
-// starting after the given cursor.
-func (m *Model) loadRepositories(after string) tea.Cmd {
+// loadRepositoryPage returns a command that fetches one page of repository
+// names, starting after the given cursor.
+func (m *Model) loadRepositoryPage(after string) tea.Cmd {
 	return func() tea.Msg {
 		page, err := m.svc.ListRepositories(m.Title, m.isUser, after)
 		if err != nil {
@@ -127,6 +141,44 @@ func (m *Model) loadRepositories(after string) tea.Cmd {
 		}
 		return repositoryPageMsg(page)
 	}
+}
+
+// loadRepositoryBatch returns a command that fetches the configuration of
+// one batch of repositories.
+func (m *Model) loadRepositoryBatch(names []string) tea.Cmd {
+	return func() tea.Msg {
+		repositories, err := m.svc.GetRepositories(m.Title, names)
+		if err != nil {
+			return shared.ErrorMsg{Err: err}
+		}
+		return repositoryBatchMsg(repositories)
+	}
+}
+
+// startBatches requests pending batches until maxConcurrentBatches are in
+// flight and returns the commands that run them.
+func (m *Model) startBatches() []tea.Cmd {
+	var cmds []tea.Cmd
+	for len(m.pending) > 0 && m.inFlight < maxConcurrentBatches {
+		batch := m.pending[0]
+		m.pending = m.pending[1:]
+		m.inFlight++
+		cmds = append(cmds, m.loadRepositoryBatch(batch))
+	}
+	return cmds
+}
+
+// batchNames splits names into batches of at most github.RepositoryBatchSize.
+func batchNames(names []string) [][]string {
+	var batches [][]string
+	for start := 0; start < len(names); start += github.RepositoryBatchSize {
+		end := start + github.RepositoryBatchSize
+		if end > len(names) {
+			end = len(names)
+		}
+		batches = append(batches, names[start:end])
+	}
+	return batches
 }
 
 // loadedFraction is how much of the listing has arrived, for the progress bar.
@@ -137,27 +189,51 @@ func (m *Model) loadedFraction() float64 {
 	return float64(len(m.repos)) / float64(m.repoCount)
 }
 
+// finishLoading sorts the repositories, shows them and completes the progress bar.
+func (m *Model) finishLoading() tea.Cmd {
+	sort.Slice(m.repos, func(i, j int) bool {
+		return m.repos[i].Name < m.repos[j].Name
+	})
+	if len(m.repos) > 0 {
+		m.populateRepoList()
+	}
+	return m.progress.SetPercent(1.0)
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case repositoryPageMsg:
 		m.repoCount = msg.TotalCount
-		for _, repository := range msg.Repositories {
-			m.repos = append(m.repos, repo.NewRepoConfig(repository))
+		for _, ref := range msg.Repositories {
+			m.names = append(m.names, ref.Name)
 		}
 
 		if msg.HasNextPage {
-			return m, tea.Batch(m.progress.SetPercent(m.loadedFraction()), m.loadRepositories(msg.EndCursor))
+			return m, m.loadRepositoryPage(msg.EndCursor)
 		}
 
-		sort.Slice(m.repos, func(i, j int) bool {
-			return m.repos[i].Name < m.repos[j].Name
-		})
-		if len(m.repos) > 0 {
-			m.populateRepoList()
+		// The listing is complete; the names are the authoritative count.
+		m.repoCount = len(m.names)
+		if m.repoCount == 0 {
+			return m, m.finishLoading()
 		}
-		return m, m.progress.SetPercent(1.0)
+		m.pending = batchNames(m.names)
+		return m, tea.Batch(m.startBatches()...)
+
+	case repositoryBatchMsg:
+		m.inFlight--
+		for _, repository := range msg {
+			m.repos = append(m.repos, repo.NewRepoConfig(repository))
+		}
+
+		if len(m.repos) >= m.repoCount && len(m.pending) == 0 && m.inFlight == 0 {
+			return m, m.finishLoading()
+		}
+
+		cmds := append([]tea.Cmd{m.progress.SetPercent(m.loadedFraction())}, m.startBatches()...)
+		return m, tea.Batch(cmds...)
 
 	case filters.FiltersMsg:
 		m.filters = filters.FilterMap(msg)

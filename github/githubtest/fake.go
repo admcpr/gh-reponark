@@ -15,6 +15,12 @@ type ListCall struct {
 	After  string
 }
 
+// GetCall records the arguments of a GetRepositories call.
+type GetCall struct {
+	Owner string
+	Names []string
+}
+
 // Fake is a github.Service backed by fixed data. Set the *Err fields to make
 // the corresponding method fail. Every call is recorded so tests can assert on
 // what the UI asked for. Use it via a pointer so the recorded calls are kept.
@@ -22,14 +28,17 @@ type Fake struct {
 	User    github.User
 	UserErr error
 
-	// Repositories are returned by ListRepositories. When PageSize is greater
-	// than zero they are served PageSize at a time using the slice index as
-	// the cursor; otherwise a single page holds them all.
+	// Repositories back both ListRepositories, which returns their names, and
+	// GetRepositories, which returns them by name. When PageSize is greater
+	// than zero the names are listed PageSize at a time using the slice index
+	// as the cursor; otherwise a single page holds them all.
 	Repositories []repo.Repository
 	PageSize     int
 	ListErr      error
+	GetErr       error
 
 	ListCalls []ListCall
+	GetCalls  []GetCall
 }
 
 var _ github.Service = (*Fake)(nil)
@@ -62,10 +71,32 @@ func (f *Fake) ListRepositories(login string, isUser bool, after string) (github
 	}
 
 	page := github.RepositoryPage{
-		Repositories: append([]repo.Repository{}, f.Repositories[start:end]...),
+		Repositories: make([]github.RepositoryRef, 0, end-start),
 		TotalCount:   total,
 		EndCursor:    strconv.Itoa(end),
 		HasNextPage:  end < total,
 	}
+	for _, repository := range f.Repositories[start:end] {
+		page.Repositories = append(page.Repositories, github.RepositoryRef{Name: repository.Name, Url: repository.Url})
+	}
 	return page, nil
+}
+
+func (f *Fake) GetRepositories(owner string, names []string) ([]repo.Repository, error) {
+	f.GetCalls = append(f.GetCalls, GetCall{Owner: owner, Names: append([]string(nil), names...)})
+	if f.GetErr != nil {
+		return nil, f.GetErr
+	}
+
+	repositories := make([]repo.Repository, len(names))
+	for i, name := range names {
+		repositories[i] = repo.Repository{Name: name}
+		for _, repository := range f.Repositories {
+			if repository.Name == name {
+				repositories[i] = repository
+				break
+			}
+		}
+	}
+	return repositories, nil
 }

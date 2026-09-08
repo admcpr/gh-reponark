@@ -2,6 +2,7 @@ package github
 
 import (
 	"fmt"
+	"reflect"
 
 	"gh-reponark/repo"
 
@@ -81,7 +82,7 @@ func (c *Client) ListRepositories(login string, isUser bool, after string) (Repo
 		"after": cursor,
 	}
 
-	var connection repositoryConnection
+	var connection repositoryNameConnection
 	if isUser {
 		var query userRepositoriesQuery
 		if err := c.graphql.Query("UserRepositories", &query, variables); err != nil {
@@ -97,14 +98,53 @@ func (c *Client) ListRepositories(login string, isUser bool, after string) (Repo
 	}
 
 	page := RepositoryPage{
-		Repositories: connection.Nodes,
+		Repositories: make([]RepositoryRef, len(connection.Nodes)),
 		TotalCount:   connection.TotalCount,
 		EndCursor:    connection.PageInfo.EndCursor,
 		HasNextPage:  connection.PageInfo.HasNextPage,
 	}
-	if page.Repositories == nil {
-		page.Repositories = []repo.Repository{}
+	for i, node := range connection.Nodes {
+		page.Repositories[i] = RepositoryRef{Name: node.Name, Url: node.Url}
 	}
 
 	return page, nil
+}
+
+// GetRepositories fetches several repositories in one request by aliasing a
+// repository field per name:
+//
+//	repo0: repository(owner: $owner, name: $name0) { ... }
+//	repo1: repository(owner: $owner, name: $name1) { ... }
+//
+// The query struct is built at runtime so the selection set still comes from
+// the graphql tags on repo.Repository.
+func (c *Client) GetRepositories(owner string, names []string) ([]repo.Repository, error) {
+	if len(names) == 0 {
+		return []repo.Repository{}, nil
+	}
+
+	repositoryType := reflect.TypeOf(repo.Repository{})
+	fields := make([]reflect.StructField, len(names))
+	variables := map[string]interface{}{"owner": graphql.String(owner)}
+	for i, name := range names {
+		variable := fmt.Sprintf("name%d", i)
+		fields[i] = reflect.StructField{
+			Name: fmt.Sprintf("Repo%d", i),
+			Type: repositoryType,
+			Tag:  reflect.StructTag(fmt.Sprintf(`graphql:"repo%d: repository(owner: $owner, name: $%s)"`, i, variable)),
+		}
+		variables[variable] = graphql.String(name)
+	}
+
+	query := reflect.New(reflect.StructOf(fields))
+	if err := c.graphql.Query("Repositories", query.Interface(), variables); err != nil {
+		return nil, fmt.Errorf("fetching %d repositories for %s: %w", len(names), owner, err)
+	}
+
+	repositories := make([]repo.Repository, len(names))
+	for i := range names {
+		repositories[i] = query.Elem().Field(i).Interface().(repo.Repository)
+	}
+
+	return repositories, nil
 }
