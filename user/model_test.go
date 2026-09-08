@@ -207,11 +207,43 @@ func TestModel_HelpView(t *testing.T) {
 	content := plain(m.HelpView())
 
 	assert.Contains(t, content, "select")
-	assert.Contains(t, content, "back")
+	assert.Contains(t, content, "quit")
+}
+
+func TestModel_Update_EscGoesBack(t *testing.T) {
+	m := newTestModel()
+	m.SetUser(newTestUser("octocat", "acme"))
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	if assert.NotNil(t, cmd) {
+		prev, ok := cmd().(shared.PreviousMsg)
+		assert.True(t, ok, "expected a PreviousMsg")
+		assert.Nil(t, prev.Message)
+	}
+}
+
+func TestModel_ListUsesKeyMapBindings(t *testing.T) {
+	m := newTestModel()
+	m.SetUser(newTestUser("octocat", "acme", "globex"))
+
+	// The vim keys come from the key map, not the list's defaults.
+	m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	assert.Equal(t, 1, m.orgList.Index())
+	m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
+	assert.Equal(t, 0, m.orgList.Index())
+
+	assert.Equal(t, m.keymap.Up.Keys(), m.orgList.KeyMap.CursorUp.Keys())
+	assert.Equal(t, m.keymap.Down.Keys(), m.orgList.KeyMap.CursorDown.Keys())
 }
 
 func TestUserKeyMap(t *testing.T) {
-	keymap := userKeyMap{}
+	keymap := newUserKeyMap()
+
+	assert.Equal(t, []string{"up", "k"}, keymap.Up.Keys())
+	assert.Equal(t, []string{"down", "j"}, keymap.Down.Keys())
+	assert.Equal(t, []string{"enter"}, keymap.Select.Keys())
+	assert.Equal(t, []string{"esc"}, keymap.Back.Keys())
 
 	short := keymap.ShortHelp()
 	assert.Len(t, short, 4)

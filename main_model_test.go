@@ -11,6 +11,7 @@ import (
 	"gh-reponark/github"
 	"gh-reponark/github/githubtest"
 	"gh-reponark/org"
+	"gh-reponark/repo"
 	"gh-reponark/shared"
 	"gh-reponark/user"
 
@@ -155,13 +156,13 @@ func TestMainModel_Update_OpenFiltersMsg(t *testing.T) {
 func TestMainModel_Update_EditFilterMsg(t *testing.T) {
 	tests := []struct {
 		name     string
-		property filters.Property
+		property repo.PropertySchema
 		wantType tea.Model
 	}{
-		{name: "bool", property: filters.Property{Name: "Is Archived", Type: "bool"}, wantType: &filters.BoolModel{}},
-		{name: "int", property: filters.Property{Name: "Stargazer Count", Type: "int"}, wantType: &filters.IntModel{}},
-		{name: "date", property: filters.Property{Name: "Created At", Type: "time.Time"}, wantType: &filters.DateModel{}},
-		{name: "string", property: filters.Property{Name: "Name", Type: "string"}, wantType: &filters.StringModel{}},
+		{name: "bool", property: repo.PropertySchema{Name: "Is Archived", Type: "bool"}, wantType: &filters.BoolModel{}},
+		{name: "int", property: repo.PropertySchema{Name: "Stargazer Count", Type: "int"}, wantType: &filters.IntModel{}},
+		{name: "date", property: repo.PropertySchema{Name: "Created At", Type: "time.Time"}, wantType: &filters.DateModel{}},
+		{name: "string", property: repo.PropertySchema{Name: "Name", Type: "string"}, wantType: &filters.StringModel{}},
 	}
 
 	for _, tt := range tests {
@@ -182,7 +183,7 @@ func TestMainModel_Update_EditFilterMsg_UnsupportedType(t *testing.T) {
 	m := MainModel{nav: shared.NewNavigator(), width: 80, height: 24}
 	m.nav.Push(filters.NewModel(nil, 20, 10))
 
-	m, cmd := update(m, filters.EditFilterMsg{Property: filters.Property{Name: "Languages", Type: "[]string"}})
+	m, cmd := update(m, filters.EditFilterMsg{Property: repo.PropertySchema{Name: "Languages", Type: "[]string"}})
 
 	assert.Nil(t, cmd)
 	assert.Equal(t, 1, m.nav.Len(), "no editor exists so nothing should be pushed")
@@ -209,7 +210,7 @@ func TestMainModel_Update_FullNavigationFlow(t *testing.T) {
 	m, _ = update(m, filters.OpenFiltersMsg{})
 	assert.IsType(t, &filters.Model{}, current(t, m))
 
-	m, _ = update(m, filters.EditFilterMsg{Property: filters.Property{Name: "Is Archived", Type: "bool"}})
+	m, _ = update(m, filters.EditFilterMsg{Property: repo.PropertySchema{Name: "Is Archived", Type: "bool"}})
 	assert.IsType(t, &filters.BoolModel{}, current(t, m))
 	assert.Equal(t, 4, m.nav.Len())
 

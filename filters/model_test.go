@@ -20,7 +20,6 @@ func TestNewModel(t *testing.T) {
 	assert.Equal(t, 30, m.height)
 	assert.NotNil(t, m.filters)
 	assert.Empty(t, m.filters)
-	assert.Empty(t, m.properties)
 	assert.NotNil(t, m.filterSearch)
 }
 
@@ -109,26 +108,24 @@ func TestModel_Update_AddFilterMsgReplacesSameName(t *testing.T) {
 func TestModel_Update_DelegatesToSearch(t *testing.T) {
 	m := NewModel(nil, 80, 30)
 
-	msg := filtersListMsg(repo.RepoConfig{
-		Properties: map[string]repo.RepoProperty{
-			"Name": {Name: "Name", Type: "string", Description: "The name"},
-		},
-	})
-	m.Update(msg)
+	m.Update(tea.KeyPressMsg{Code: 'N', Text: "N"})
 
 	search := m.filterSearch.(FilterSearchModel)
-	assert.Contains(t, search.properties, "Name")
+	assert.Equal(t, "N", search.textinput.Value())
+	prop, ok := search.CurrentPropertySuggestion()
+	assert.True(t, ok)
+	assert.Equal(t, "Name", prop.Name)
 }
 
 func TestNewFilterModel(t *testing.T) {
 	tests := []struct {
 		name     string
-		property Property
+		property repo.PropertySchema
 		check    func(t *testing.T, m tea.Model)
 	}{
 		{
 			name:     "bool",
-			property: Property{Name: "Is Archived", Type: "bool"},
+			property: repo.PropertySchema{Name: "Is Archived", Type: "bool"},
 			check: func(t *testing.T, m tea.Model) {
 				bm, ok := m.(*BoolModel)
 				assert.True(t, ok)
@@ -138,7 +135,7 @@ func TestNewFilterModel(t *testing.T) {
 		},
 		{
 			name:     "int",
-			property: Property{Name: "Stargazer Count", Type: "int"},
+			property: repo.PropertySchema{Name: "Stargazer Count", Type: "int"},
 			check: func(t *testing.T, m tea.Model) {
 				im, ok := m.(*IntModel)
 				assert.True(t, ok)
@@ -149,7 +146,7 @@ func TestNewFilterModel(t *testing.T) {
 		},
 		{
 			name:     "time.Time",
-			property: Property{Name: "Created At", Type: "time.Time"},
+			property: repo.PropertySchema{Name: "Created At", Type: "time.Time"},
 			check: func(t *testing.T, m tea.Model) {
 				dm, ok := m.(*DateModel)
 				assert.True(t, ok)
@@ -160,7 +157,7 @@ func TestNewFilterModel(t *testing.T) {
 		},
 		{
 			name:     "string",
-			property: Property{Name: "Primary Language", Type: "string"},
+			property: repo.PropertySchema{Name: "Primary Language", Type: "string"},
 			check: func(t *testing.T, m tea.Model) {
 				sm, ok := m.(*StringModel)
 				assert.True(t, ok)
@@ -170,7 +167,7 @@ func TestNewFilterModel(t *testing.T) {
 		},
 		{
 			name:     "unsupported type",
-			property: Property{Name: "Languages", Type: "[]string"},
+			property: repo.PropertySchema{Name: "Languages", Type: "[]string"},
 			check: func(t *testing.T, m tea.Model) {
 				assert.Nil(t, m)
 			},
@@ -250,14 +247,41 @@ func TestNewFiltersList_Empty(t *testing.T) {
 }
 
 func TestFilterKeyMap(t *testing.T) {
-	keymap := filterKeyMap{}
+	keymap := newFilterKeyMap()
+
+	assert.Equal(t, []string{"enter"}, keymap.Select.Keys())
+	assert.Equal(t, []string{"tab"}, keymap.Complete.Keys())
+	assert.Equal(t, []string{"down", "ctrl+n"}, keymap.NextSuggestion.Keys())
+	assert.Equal(t, []string{"up", "ctrl+p"}, keymap.PrevSuggestion.Keys())
+	assert.Equal(t, []string{"esc", "ctrl+enter"}, keymap.Back.Keys())
 
 	short := keymap.ShortHelp()
-	assert.Len(t, short, 4)
+	assert.Len(t, short, 5)
 
 	full := keymap.FullHelp()
 	assert.Len(t, full, 1)
 	assert.Equal(t, short, full[0])
+}
+
+func TestEditorKeyMap(t *testing.T) {
+	keymap := newEditorKeyMap()
+
+	assert.Equal(t, []string{"enter"}, keymap.Apply.Keys())
+	assert.Equal(t, []string{"esc"}, keymap.Back.Keys())
+	assert.Equal(t, []string{"tab", "shift+tab"}, keymap.NextField.Keys())
+	assert.Equal(t, []string{"left", "right"}, keymap.Toggle.Keys())
+	assert.Equal(t, []string{"y", "Y"}, keymap.Yes.Keys())
+	assert.Equal(t, []string{"n", "N"}, keymap.No.Keys())
+}
+
+func TestModel_HelpView_ListsEveryBinding(t *testing.T) {
+	m := NewModel(nil, 120, 30)
+
+	content := plain(m.HelpView())
+
+	for _, want := range []string{"add filter", "complete", "next", "prev", "back"} {
+		assert.Contains(t, content, want)
+	}
 }
 
 // plain renders a view to a string with all ANSI styling removed so tests can

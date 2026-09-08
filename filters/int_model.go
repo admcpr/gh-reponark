@@ -5,6 +5,8 @@ import (
 	"gh-reponark/shared"
 	"strconv"
 
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -14,6 +16,8 @@ type IntModel struct {
 	name      string
 	fromInput textinput.Model
 	toInput   textinput.Model
+	keymap    editorKeyMap
+	help      help.Model
 	width     int
 	height    int
 }
@@ -21,6 +25,7 @@ type IntModel struct {
 func (m *IntModel) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
+	m.help.SetWidth(width)
 }
 
 func intValidator(s, prompt string) error {
@@ -54,6 +59,8 @@ func NewIntModel(title string, from, to, width, height int) *IntModel {
 		name:      title,
 		fromInput: newIntInputModel("From", from),
 		toInput:   newIntInputModel("To", to),
+		keymap:    newEditorKeyMap(),
+		help:      shared.NewHelpModel(width),
 	}
 
 	m.fromInput.Focus()
@@ -71,17 +78,15 @@ func (m *IntModel) Init() tea.Cmd {
 func (m *IntModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	switch msg := msg.(type) {
-
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "enter":
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
+		switch {
+		case key.Matches(msg, m.keymap.Apply):
 			return m, m.SendAddFilterMsg
-		case "esc":
+		case key.Matches(msg, m.keymap.Back):
 			return m, func() tea.Msg {
 				return shared.PreviousMsg{}
 			}
-		case "tab", "shift+tab":
+		case key.Matches(msg, m.keymap.NextField):
 			if m.fromInput.Focused() {
 				m.fromInput.Blur()
 				m.toInput.Focus()
@@ -109,10 +114,17 @@ func (m *IntModel) View() tea.View {
 	if m.toInput.Err != nil {
 		errorText = "\n" + shared.ErrorStyle.Render(m.toInput.Err.Error())
 	}
-	title := fmt.Sprintf("%s - w: %d h: %d", m.name, m.width, m.height)
 	inputs := lipgloss.JoinVertical(lipgloss.Left, m.fromInput.View(), m.toInput.View())
-	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(title), inputs, errorText)
+	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(m.name), inputs, errorText)
 	return tea.NewView(fmt.Sprint(lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))))
+}
+
+func (m *IntModel) HelpView() tea.View {
+	return tea.NewView(m.help.View(shared.KeyBindings{
+		m.keymap.NextField,
+		m.keymap.Apply,
+		m.keymap.Back,
+	}))
 }
 
 func (m *IntModel) Value() (int, int) {

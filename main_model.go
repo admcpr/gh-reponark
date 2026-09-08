@@ -10,9 +10,13 @@ import (
 	"reflect"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
+
+// quitKey exits the application from any screen.
+var quitKey = key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit"))
 
 type MainModel struct {
 	svc    github.Service
@@ -58,7 +62,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
-		if msg.String() == "ctrl+c" {
+		if key.Matches(msg, quitKey) {
 			return m, tea.Quit
 		}
 		return m, m.UpdateChild(msg)

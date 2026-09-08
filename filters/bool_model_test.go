@@ -170,3 +170,25 @@ func TestBoolModel_View(t *testing.T) {
 		}
 	}
 }
+
+func TestBoolModel_HelpView(t *testing.T) {
+	m := NewBoolModel("Is Archived", true, 120, 40)
+
+	content := plain(m.HelpView())
+
+	for _, want := range []string{"yes", "no", "toggle", "apply", "back"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("help should mention %q, got %q", want, content)
+		}
+	}
+}
+
+func TestBoolModel_SetDimensions_ResizesHelp(t *testing.T) {
+	m := NewBoolModel("Is Archived", true, 60, 40)
+
+	m.SetDimensions(100, 50)
+
+	if m.help.Width() != 100 {
+		t.Errorf("help width = %d, want 100", m.help.Width())
+	}
+}

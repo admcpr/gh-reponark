@@ -42,9 +42,9 @@ type Model struct {
 
 func NewModel(svc github.Service, orgKey shared.OrgKey, width, height int) *Model {
 	help := shared.NewHelpModel(width)
-	keymap := orgKeyMap{}
+	keymap := newOrgKeyMap()
 
-	return &Model{
+	m := &Model{
 		svc:       svc,
 		Title:     orgKey.Name,
 		isUser:    orgKey.IsUser,
@@ -53,9 +53,25 @@ func NewModel(svc github.Service, orgKey shared.OrgKey, width, height int) *Mode
 		help:      help,
 		keymap:    keymap,
 		repoModel: repo.NewModel(width/2, height),
-		repoList:  list.New([]list.Item{}, shared.SimpleItemDelegate{}, width/2, height),
 		progress:  progress.New(progress.WithoutPercentage()),
 	}
+	m.repoList = m.newRepoList(nil)
+
+	return m
+}
+
+// newRepoList builds the repository list with the shared key bindings.
+func (m *Model) newRepoList(items []list.Item) list.Model {
+	repoList := list.New(items, shared.SimpleItemDelegate{}, m.width/2, m.height-2)
+	repoList.Title = fmt.Sprintf("Organization: %s ", m.Title)
+	repoList.Styles.Title = shared.TitleStyle
+	repoList.SetStatusBarItemName("Repository", "Repositories")
+	repoList.SetShowHelp(false)
+	repoList.SetShowTitle(true)
+	// The list moves with the same bindings the help footer advertises.
+	repoList.KeyMap.CursorUp = m.keymap.Up
+	repoList.KeyMap.CursorDown = m.keymap.Down
+	return repoList
 }
 
 func (m *Model) SetDimensions(width, height int) {
@@ -64,24 +80,37 @@ func (m *Model) SetDimensions(width, height int) {
 	m.help.SetWidth(width)
 }
 
+// repoItem is a list entry that carries the repository it stands for, so the
+// selection never has to be mapped back to an index in another slice.
+type repoItem struct {
+	config repo.RepoConfig
+}
+
+func (i repoItem) FilterValue() string { return "" }
+func (i repoItem) String() string      { return i.config.Name }
+
+// populateRepoList rebuilds the list from the repositories that pass the
+// current filters and points the detail pane at the first of them.
 func (m *Model) populateRepoList() {
 	filteredRepositories := m.filters.FilterRepos(m.repos)
 	items := make([]list.Item, len(filteredRepositories))
-	for i, repo := range filteredRepositories {
-		items[i] = shared.SimpleItem(repo.Name)
+	for i, config := range filteredRepositories {
+		items[i] = repoItem{config: config}
 	}
 
-	list := list.New(items, shared.SimpleItemDelegate{}, m.width/2, m.height-2)
-	list.Title = fmt.Sprintf("Organization: %s ", m.Title)
-	list.Styles.Title = shared.TitleStyle
-	list.SetStatusBarItemName("Repository", "Repositories")
-	list.SetShowHelp(false)
-	list.SetShowTitle(true)
-
-	m.repoList = list
-	if len(m.repos) > 0 {
-		m.repoModel.SelectRepo(m.repos[m.repoList.Index()])
+	m.repoList = m.newRepoList(items)
+	if selected, ok := m.selectedRepo(); ok {
+		m.repoModel.SelectRepo(selected)
 	}
+}
+
+// selectedRepo returns the repository highlighted in the list, if any.
+func (m *Model) selectedRepo() (repo.RepoConfig, bool) {
+	item, ok := m.repoList.SelectedItem().(repoItem)
+	if !ok {
+		return repo.RepoConfig{}, false
+	}
+	return item.config, true
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -141,16 +170,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "F", "f":
+		repoKeys := m.repoModel.Keys()
+		switch {
+		case key.Matches(msg, m.keymap.Filters):
 			return m, func() tea.Msg {
 				return filters.OpenFiltersMsg{Filters: m.filters}
 			}
-		case "esc":
+		case key.Matches(msg, m.keymap.Back):
 			return m, func() tea.Msg {
 				return shared.PreviousMsg{}
 			}
-		case "tab", "shift+tab":
+		case key.Matches(msg, repoKeys.NextTab, repoKeys.PrevTab):
 			repoModel, cmd := m.repoModel.Update(msg)
 			m.repoModel = repoModel.(repo.Model)
 			return m, cmd
@@ -170,13 +200,14 @@ func (m *Model) View() tea.View {
 		return m.ProgressView()
 	}
 
-	if len(m.repos) == 0 || m.repoList.Index() < 0 || m.repoList.Index() >= len(m.repos) {
+	selected, ok := m.selectedRepo()
+	if !ok {
 		repoList := shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoList.View())
 		empty := shared.AppStyle.Width(shared.Half(m.width)).Render("No repositories found")
 		return tea.NewView(fmt.Sprint(lipgloss.JoinHorizontal(lipgloss.Top, repoList, empty)))
 	}
 
-	m.repoModel.SelectRepo(m.repos[m.repoList.Index()])
+	m.repoModel.SelectRepo(selected)
 
 	var repoList = shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoList.View())
 	var settings = shared.AppStyle.Width(shared.Half(m.width)).Render(fmt.Sprint(m.repoModel.View().Content))
@@ -207,7 +238,21 @@ func (m Model) HeaderView() tea.View {
 }
 
 func (m Model) HelpView() tea.View {
-	return tea.NewView(m.help.View(m.keymap))
+	return tea.NewView(m.help.View(m.helpKeys()))
+}
+
+// helpKeys lists every binding this screen handles, including the ones it
+// forwards to the detail pane, in the order they appear in the footer.
+func (m Model) helpKeys() shared.KeyBindings {
+	repoKeys := m.repoModel.Keys()
+	return shared.KeyBindings{
+		m.keymap.Up,
+		m.keymap.Down,
+		repoKeys.NextTab,
+		repoKeys.PrevTab,
+		m.keymap.Filters,
+		m.keymap.Back,
+	}
 }
 
 func (m *Model) ProgressView() tea.View {
@@ -216,19 +261,32 @@ func (m *Model) ProgressView() tea.View {
 	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Center, text, m.progress.View())))
 }
 
-type orgKeyMap struct{}
-
-func (k orgKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{
-		key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-		key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next pane")),
-		key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev pane")),
-		key.NewBinding(key.WithKeys("f", "F"), key.WithHelp("f", "filters")),
-		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-	}
+// orgKeyMap holds the bindings the repository list screen handles itself. Tab
+// switching is owned by the detail pane's repo.KeyMap.
+type orgKeyMap struct {
+	Up      key.Binding
+	Down    key.Binding
+	Filters key.Binding
+	Back    key.Binding
 }
 
-func (k orgKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{k.ShortHelp()}
+func newOrgKeyMap() orgKeyMap {
+	return orgKeyMap{
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "down"),
+		),
+		Filters: key.NewBinding(
+			key.WithKeys("f", "F"),
+			key.WithHelp("f", "filters"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "back"),
+		),
+	}
 }

@@ -176,10 +176,18 @@ func TestModel_HelpView(t *testing.T) {
 
 	content := plain(m.HelpView())
 
-	assert.Contains(t, content, "prev tab")
 	assert.Contains(t, content, "next tab")
-	assert.Contains(t, content, "back")
-	assert.Contains(t, content, "quit")
+	assert.Contains(t, content, "prev tab")
+	assert.NotContains(t, content, "quit", "only keys the pane actually handles are advertised")
+}
+
+func TestModel_Keys(t *testing.T) {
+	m := NewModel(80, 24)
+
+	keys := m.Keys()
+
+	assert.Equal(t, []string{"tab"}, keys.NextTab.Keys())
+	assert.Equal(t, []string{"shift+tab"}, keys.PrevTab.Keys())
 }
 
 func TestNewSettingsList(t *testing.T) {

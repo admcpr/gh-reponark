@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -44,6 +45,12 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+// Keys returns the bindings this pane responds to, so a parent screen can
+// forward exactly those keys and advertise them in its own help.
+func (m Model) Keys() KeyMap {
+	return m.keymap
+}
+
 func (m *Model) SelectRepo(repository RepoConfig) {
 	m.repository = repository
 	key := m.repository.GroupKeys[m.activeTab]
@@ -60,10 +67,9 @@ func (m *Model) SelectTab(index int) {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "tab":
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
+		switch {
+		case key.Matches(msg, m.keymap.NextTab):
 			if m.activeTab < len(m.repository.PropertyGroups)-1 {
 				m.SelectTab(m.activeTab + 1)
 			} else {
@@ -71,7 +77,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			repoHeader, _ := m.repoHeader.Update(TabSelectMessage{Index: m.activeTab})
 			m.repoHeader = repoHeader.(HeaderModel)
-		case "shift+tab":
+		case key.Matches(msg, m.keymap.PrevTab):
 			if m.activeTab > 0 {
 				m.SelectTab(m.activeTab - 1)
 			} else {

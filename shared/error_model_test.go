@@ -100,7 +100,9 @@ func TestErrorModel_HeaderAndHelpViews(t *testing.T) {
 }
 
 func TestErrorKeyMap(t *testing.T) {
-	keymap := errorKeyMap{}
+	keymap := newErrorKeyMap()
+
+	assert.Equal(t, []string{"esc", "enter"}, keymap.Back.Keys())
 
 	short := keymap.ShortHelp()
 	assert.Len(t, short, 1)

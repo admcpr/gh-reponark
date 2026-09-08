@@ -22,7 +22,7 @@ func NewErrorModel(err error, width, height int) *ErrorModel {
 	return &ErrorModel{
 		err:    err,
 		help:   NewHelpModel(width),
-		keymap: errorKeyMap{},
+		keymap: newErrorKeyMap(),
 		width:  width,
 		height: height,
 	}
@@ -43,11 +43,8 @@ func (m *ErrorModel) Init() tea.Cmd {
 }
 
 func (m *ErrorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyPressMsg); ok {
-		switch msg.String() {
-		case "esc", "enter":
-			return m, func() tea.Msg { return PreviousMsg{} }
-		}
+	if msg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(msg, m.keymap.Back) {
+		return m, func() tea.Msg { return PreviousMsg{} }
 	}
 	return m, nil
 }
@@ -72,12 +69,21 @@ func (m *ErrorModel) HelpView() tea.View {
 	return tea.NewView(m.help.View(m.keymap))
 }
 
-type errorKeyMap struct{}
+type errorKeyMap struct {
+	Back key.Binding
+}
+
+func newErrorKeyMap() errorKeyMap {
+	return errorKeyMap{
+		Back: key.NewBinding(
+			key.WithKeys("esc", "enter"),
+			key.WithHelp("esc", "back"),
+		),
+	}
+}
 
 func (k errorKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{
-		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-	}
+	return []key.Binding{k.Back}
 }
 
 func (k errorKeyMap) FullHelp() [][]key.Binding {

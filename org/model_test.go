@@ -27,6 +27,16 @@ func newOrgModel() *Model {
 	return NewModel(&githubtest.Fake{}, shared.OrgKey{Name: "demo", IsUser: false}, 80, 24)
 }
 
+// itemNames returns the repository names currently shown in the list.
+func itemNames(m *Model) []string {
+	items := m.repoList.Items()
+	names := make([]string, len(items))
+	for i, item := range items {
+		names[i] = item.(repoItem).config.Name
+	}
+	return names
+}
+
 // lastPage builds a page message that completes the listing.
 func lastPage(repositories ...repo.Repository) repositoryPageMsg {
 	return repositoryPageMsg(github.RepositoryPage{
@@ -130,11 +140,12 @@ func TestModel_Update_SinglePage(t *testing.T) {
 	assert.Equal(t, "alpha", m.repos[0].Name, "repos should be sorted by name")
 	assert.Equal(t, "zulu", m.repos[1].Name)
 
-	items := m.repoList.Items()
-	assert.Len(t, items, 2)
-	assert.Equal(t, shared.SimpleItem("alpha"), items[0])
-	assert.Equal(t, shared.SimpleItem("zulu"), items[1])
+	assert.Equal(t, []string{"alpha", "zulu"}, itemNames(m))
 	assert.Equal(t, "Organization: demo ", m.repoList.Title)
+
+	selected, ok := m.selectedRepo()
+	assert.True(t, ok)
+	assert.Equal(t, "alpha", selected.Name)
 }
 
 func TestModel_Update_PartialPageRequestsNext(t *testing.T) {
@@ -228,9 +239,52 @@ func TestModel_Update_FiltersMsg(t *testing.T) {
 
 	assert.Nil(t, cmd)
 	assert.Equal(t, filterMap, m.filters)
-	items := m.repoList.Items()
-	assert.Len(t, items, 1)
-	assert.Equal(t, shared.SimpleItem("archived"), items[0])
+	assert.Equal(t, []string{"archived"}, itemNames(m))
+}
+
+func TestModel_SelectedRepo_FollowsFilteredList(t *testing.T) {
+	m := newLoadedModel(
+		repo.Repository{Name: "alpha", IsArchived: false},
+		repo.Repository{Name: "bravo", IsArchived: true},
+		repo.Repository{Name: "charlie", IsArchived: true},
+	)
+	m.Update(filters.FiltersMsg(filters.FilterMap{"Is Archived": filters.NewBoolFilter("Is Archived", true)}))
+	assert.Equal(t, []string{"bravo", "charlie"}, itemNames(m))
+
+	selected, ok := m.selectedRepo()
+	assert.True(t, ok)
+	assert.Equal(t, "bravo", selected.Name, "the first visible repo should be selected, not the first of all repos")
+
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	selected, ok = m.selectedRepo()
+	assert.True(t, ok)
+	assert.Equal(t, "charlie", selected.Name)
+	assert.Contains(t, plain(m.View()), "charlie")
+}
+
+func TestModel_View_AllFilteredOutShowsEmptyState(t *testing.T) {
+	m := newLoadedModel(repo.Repository{Name: "alpha"}, repo.Repository{Name: "bravo"})
+	m.Update(filters.FiltersMsg(filters.FilterMap{"Is Archived": filters.NewBoolFilter("Is Archived", true)}))
+
+	_, ok := m.selectedRepo()
+	assert.False(t, ok)
+	assert.Empty(t, itemNames(m))
+	assert.Contains(t, plain(m.View()), "No repositories found")
+}
+
+func TestModel_SelectedRepo_NoneBeforeLoad(t *testing.T) {
+	m := newOrgModel()
+
+	_, ok := m.selectedRepo()
+
+	assert.False(t, ok)
+}
+
+func TestRepoItem(t *testing.T) {
+	item := repoItem{config: repo.RepoConfig{Name: "widgets"}}
+
+	assert.Equal(t, "widgets", item.String())
+	assert.Equal(t, "", item.FilterValue(), "built-in list filtering stays disabled")
 }
 
 func TestModel_Update_FiltersMsg_BeforeReposLoad(t *testing.T) {
@@ -394,8 +448,32 @@ func TestModel_HelpView(t *testing.T) {
 	content := plain(m.HelpView())
 
 	assert.Contains(t, content, "filters")
-	assert.Contains(t, content, "next pane")
+	assert.Contains(t, content, "next tab")
+	assert.Contains(t, content, "prev tab")
 	assert.Contains(t, content, "back")
+}
+
+func TestModel_HelpKeys_IncludeDetailPaneBindings(t *testing.T) {
+	m := newOrgModel()
+
+	keys := m.helpKeys()
+
+	assert.Len(t, keys, 6)
+	assert.Equal(t, m.repoModel.Keys().NextTab.Keys(), keys[2].Keys())
+	assert.Equal(t, m.repoModel.Keys().PrevTab.Keys(), keys[3].Keys())
+	assert.Equal(t, m.keymap.Filters.Keys(), keys[4].Keys())
+}
+
+func TestModel_ListUsesKeyMapBindings(t *testing.T) {
+	m := newLoadedModel(repo.Repository{Name: "alpha"}, repo.Repository{Name: "bravo"})
+
+	m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	assert.Equal(t, 1, m.repoList.Index())
+	m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
+	assert.Equal(t, 0, m.repoList.Index())
+
+	assert.Equal(t, m.keymap.Up.Keys(), m.repoList.KeyMap.CursorUp.Keys())
+	assert.Equal(t, m.keymap.Down.Keys(), m.repoList.KeyMap.CursorDown.Keys())
 }
 
 func TestModel_ProgressView(t *testing.T) {
@@ -406,13 +484,11 @@ func TestModel_ProgressView(t *testing.T) {
 	assert.Contains(t, content, "Getting repositories ... 0 of 0")
 }
 
-func TestInternalOrgKeyMap(t *testing.T) {
-	keymap := orgKeyMap{}
+func TestNewOrgKeyMap(t *testing.T) {
+	keymap := newOrgKeyMap()
 
-	short := keymap.ShortHelp()
-	assert.Len(t, short, 6)
-
-	full := keymap.FullHelp()
-	assert.Len(t, full, 1)
-	assert.Equal(t, short, full[0])
+	assert.Equal(t, []string{"up", "k"}, keymap.Up.Keys())
+	assert.Equal(t, []string{"down", "j"}, keymap.Down.Keys())
+	assert.Equal(t, []string{"f", "F"}, keymap.Filters.Keys())
+	assert.Equal(t, []string{"esc"}, keymap.Back.Keys())
 }

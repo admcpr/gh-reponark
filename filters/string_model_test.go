@@ -106,3 +106,28 @@ func TestStringModel_View(t *testing.T) {
 		}
 	}
 }
+
+func TestStringModel_HelpView(t *testing.T) {
+	m := NewStringModel("Title", "", 120, 10)
+
+	content := plain(m.HelpView())
+
+	for _, want := range []string{"apply", "back"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("help should mention %q, got %q", want, content)
+		}
+	}
+	if strings.Contains(content, "next field") {
+		t.Errorf("the string editor has a single field, got %q", content)
+	}
+}
+
+func TestStringModel_SetDimensions_ResizesHelp(t *testing.T) {
+	m := NewStringModel("Title", "", 40, 10)
+
+	m.SetDimensions(100, 50)
+
+	if m.help.Width() != 100 {
+		t.Fatalf("help width = %d, want 100", m.help.Width())
+	}
+}

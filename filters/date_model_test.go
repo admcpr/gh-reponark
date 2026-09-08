@@ -252,3 +252,34 @@ func TestDateModel_View_ShowsValidationErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestDateModel_Update_ShiftTabTogglesFocus(t *testing.T) {
+	m := NewDateModel("Created At", time.Time{}, time.Time{}, 60, 40)
+	shiftTab := tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
+
+	m.Update(shiftTab)
+	assert.False(t, m.fromInput.Focused())
+	assert.True(t, m.toInput.Focused())
+
+	m.Update(shiftTab)
+	assert.True(t, m.fromInput.Focused())
+	assert.False(t, m.toInput.Focused())
+}
+
+func TestDateModel_HelpView(t *testing.T) {
+	m := NewDateModel("Created At", time.Time{}, time.Time{}, 120, 40)
+
+	content := plain(m.HelpView())
+
+	for _, want := range []string{"next field", "apply", "back"} {
+		assert.Contains(t, content, want)
+	}
+}
+
+func TestDateModel_SetDimensions_ResizesHelp(t *testing.T) {
+	m := NewDateModel("Created At", time.Time{}, time.Time{}, 60, 40)
+
+	m.SetDimensions(100, 50)
+
+	assert.Equal(t, 100, m.help.Width())
+}

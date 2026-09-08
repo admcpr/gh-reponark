@@ -24,10 +24,8 @@ type OpenFiltersMsg struct{ Filters FilterMap }
 type Model struct {
 	filterSearch tea.Model
 	filtersList  list.Model
-	repository   repo.Repository
 	help         help.Model
 	keymap       filterKeyMap
-	properties   map[string]Property
 	filters      FilterMap
 	width        int
 	height       int
@@ -39,21 +37,14 @@ func (m *Model) SetDimensions(width, height int) {
 	m.help.SetWidth(width)
 }
 
-type Property struct {
-	Name        string
-	Description string
-	Type        string
-}
-
 // NewModel creates the filter screen. current holds the filters already
 // applied; they are copied so edits only reach the caller via FiltersMsg.
 func NewModel(current FilterMap, width, height int) *Model {
 	fsm := NewFilterSearchModel()
 	list := list.New([]list.Item{}, shared.SimpleItemDelegate{}, width, height-4)
-	repository := repo.Repository{}
 
 	help := shared.NewHelpModel(width)
-	keymap := filterKeyMap{}
+	keymap := newFilterKeyMap()
 
 	selected := make(FilterMap, len(current))
 	for name, filter := range current {
@@ -63,10 +54,8 @@ func NewModel(current FilterMap, width, height int) *Model {
 	return &Model{
 		filterSearch: fsm,
 		filtersList:  list,
-		repository:   repository,
 		help:         help,
 		keymap:       keymap,
-		properties:   make(map[string]Property),
 		filters:      selected,
 		width:        width,
 		height:       height,
@@ -82,8 +71,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "esc", "ctrl+enter":
+		if key.Matches(msg, m.keymap.Back) {
 			return m, func() tea.Msg {
 				return shared.PreviousMsg{Message: FiltersMsg(m.filters)}
 			}
@@ -103,7 +91,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // NewFilterModel returns the editor for a property, or nil when the property
 // type cannot be filtered on.
-func NewFilterModel(property Property, width, height int) tea.Model {
+func NewFilterModel(property repo.PropertySchema, width, height int) tea.Model {
 	switch property.Type {
 	case "bool":
 		return NewBoolModel(property.Name, false, width, height)
@@ -144,8 +132,6 @@ func (m Model) HelpView() tea.View {
 	return tea.NewView(m.help.View(m.keymap))
 }
 
-type filtersListMsg repo.RepoConfig
-
 func NewFiltersList(filters map[string]Filter, width, height int) list.Model {
 	items := make([]list.Item, len(filters))
 	i := 0
@@ -166,18 +152,4 @@ func NewFiltersList(filters map[string]Filter, width, height int) list.Model {
 	list.SetShowTitle(true)
 
 	return list
-}
-
-type filterKeyMap struct{}
-
-func (k filterKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{
-		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "complete")),
-		key.NewBinding(key.WithKeys("down"), key.WithHelp("↓", "next suggestion")),
-		key.NewBinding(key.WithKeys("up"), key.WithHelp("↑", "prev suggestion")),
-		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-	}
-}
-func (k filterKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{k.ShortHelp()}
 }

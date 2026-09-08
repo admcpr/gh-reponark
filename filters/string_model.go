@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"gh-reponark/shared"
 
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -13,6 +15,8 @@ import (
 type StringModel struct {
 	name   string
 	input  textinput.Model
+	keymap editorKeyMap
+	help   help.Model
 	width  int
 	height int
 }
@@ -34,6 +38,8 @@ func NewStringModel(name string, value string, width, height int) *StringModel {
 	return &StringModel{
 		name:   name,
 		input:  ti,
+		keymap: newEditorKeyMap(),
+		help:   shared.NewHelpModel(width),
 		width:  width,
 		height: height,
 	}
@@ -42,6 +48,7 @@ func NewStringModel(name string, value string, width, height int) *StringModel {
 func (m *StringModel) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
+	m.help.SetWidth(width)
 }
 
 func (m *StringModel) Init() tea.Cmd {
@@ -49,12 +56,11 @@ func (m *StringModel) Init() tea.Cmd {
 }
 
 func (m *StringModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "enter":
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
+		switch {
+		case key.Matches(msg, m.keymap.Apply):
 			return m, m.SendAddFilterMsg
-		case "esc":
+		case key.Matches(msg, m.keymap.Back):
 			return m, func() tea.Msg { return shared.PreviousMsg{} }
 		}
 	}
@@ -71,6 +77,13 @@ func (m *StringModel) View() tea.View {
 		m.input.View(),
 	)
 	return tea.NewView(fmt.Sprint(lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))))
+}
+
+func (m *StringModel) HelpView() tea.View {
+	return tea.NewView(m.help.View(shared.KeyBindings{
+		m.keymap.Apply,
+		m.keymap.Back,
+	}))
 }
 
 func (m *StringModel) Value() string {

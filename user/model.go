@@ -27,16 +27,19 @@ type Model struct {
 }
 
 func NewModel(svc github.Service, width, height int) *Model {
-	list := list.New([]list.Item{}, shared.DefaultDelegate, width, height)
+	keymap := newUserKeyMap()
 
+	list := list.New([]list.Item{}, shared.DefaultDelegate, width, height)
 	list.SetStatusBarItemName("Organization", "Organizations")
 	list.Styles.Title = shared.TitleStyle
 	list.SetShowTitle(false)
 	list.SetShowHelp(false)
 	list.SetShowStatusBar(false)
+	// The list moves with the same bindings the help footer advertises.
+	list.KeyMap.CursorUp = keymap.Up
+	list.KeyMap.CursorDown = keymap.Down
 
 	helpModel := shared.NewHelpModel(width)
-	keymap := userKeyMap{}
 
 	return &Model{svc: svc, orgList: list, width: width, height: height, help: helpModel, keymap: keymap}
 }
@@ -85,25 +88,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case userLoadedMsg:
 		m.SetUser(github.User(msg))
+		return m, nil
 
-		return m, cmd
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "enter":
-			if item, ok := m.orgList.SelectedItem().(shared.ListItem); ok {
-				return m, func() tea.Msg {
-					isUser := item.Title() == m.login
-					orgKey := shared.OrgKey{
-						Name:   item.Title(),
-						IsUser: isUser,
-					}
-					return shared.OpenOrgMsg{Key: orgKey}
-				}
+		switch {
+		case key.Matches(msg, m.keymap.Select):
+			item, ok := m.orgList.SelectedItem().(shared.ListItem)
+			if !ok {
+				return m, nil
 			}
-			return m, cmd
-		default:
-			m.orgList, cmd = m.orgList.Update(msg)
-			return m, cmd
+			return m, func() tea.Msg {
+				isUser := item.Title() == m.login
+				orgKey := shared.OrgKey{
+					Name:   item.Title(),
+					IsUser: isUser,
+				}
+				return shared.OpenOrgMsg{Key: orgKey}
+			}
+		case key.Matches(msg, m.keymap.Back):
+			return m, func() tea.Msg { return shared.PreviousMsg{} }
 		}
 	}
 
@@ -133,15 +136,38 @@ func (m Model) HelpView() tea.View {
 	return tea.NewView(m.help.View(m.keymap))
 }
 
-type userKeyMap struct{}
+// userKeyMap holds the bindings for the organization picker. Update matches
+// against these and the help footer renders them.
+type userKeyMap struct {
+	Up     key.Binding
+	Down   key.Binding
+	Select key.Binding
+	Back   key.Binding
+}
+
+func newUserKeyMap() userKeyMap {
+	return userKeyMap{
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "down"),
+		),
+		Select: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "select"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "quit"),
+		),
+	}
+}
 
 func (k userKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{
-		key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-		key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
-		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-	}
+	return []key.Binding{k.Up, k.Down, k.Select, k.Back}
 }
 
 func (k userKeyMap) FullHelp() [][]key.Binding {

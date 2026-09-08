@@ -9,6 +9,8 @@ import (
 
 	"gh-reponark/shared"
 
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -18,6 +20,8 @@ type DateModel struct {
 	name      string
 	fromInput textinput.Model
 	toInput   textinput.Model
+	keymap    editorKeyMap
+	help      help.Model
 	width     int
 	height    int
 }
@@ -25,6 +29,7 @@ type DateModel struct {
 func (m *DateModel) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
+	m.help.SetWidth(width)
 }
 
 func dateValidator(s, prompt string) error {
@@ -78,6 +83,8 @@ func NewDateModel(name string, from, to time.Time, width, height int) *DateModel
 		name:      name,
 		fromInput: NewDateInputModel("From", from),
 		toInput:   NewDateInputModel("To", to),
+		keymap:    newEditorKeyMap(),
+		help:      shared.NewHelpModel(width),
 	}
 
 	m.fromInput.Focus()
@@ -95,18 +102,16 @@ func (m *DateModel) Init() tea.Cmd {
 func (m *DateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	switch msg := msg.(type) {
-
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "enter":
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
+		switch {
+		case key.Matches(msg, m.keymap.Apply):
 			// TODO: validate
 			return m, m.SendAddFilterMsg
-		case "esc":
+		case key.Matches(msg, m.keymap.Back):
 			return m, func() tea.Msg {
 				return shared.PreviousMsg{}
 			}
-		case "tab":
+		case key.Matches(msg, m.keymap.NextField):
 			if m.fromInput.Focused() {
 				m.fromInput.Blur()
 				m.toInput.Focus()
@@ -138,6 +143,14 @@ func (m *DateModel) View() tea.View {
 	contents := lipgloss.JoinVertical(lipgloss.Center, shared.ModalTitleStyle.Render(m.name), inputs)
 
 	return tea.NewView(fmt.Sprint(lipgloss.PlaceHorizontal(m.width, lipgloss.Center, shared.ModalStyle.Render(contents))))
+}
+
+func (m *DateModel) HelpView() tea.View {
+	return tea.NewView(m.help.View(shared.KeyBindings{
+		m.keymap.NextField,
+		m.keymap.Apply,
+		m.keymap.Back,
+	}))
 }
 
 func (m *DateModel) Focus() tea.Cmd {

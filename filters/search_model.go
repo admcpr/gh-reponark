@@ -5,18 +5,28 @@ import (
 	"gh-reponark/repo"
 	"gh-reponark/shared"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
+// FilterSearchModel lets the user pick a repository property to filter on by
+// typing its name with autocompletion. The candidates come straight from
+// repo.Schema.
 type FilterSearchModel struct {
 	textinput  textinput.Model
-	repository repo.Repository
-	properties map[string]Property
+	keymap     filterKeyMap
+	properties map[string]repo.PropertySchema
 }
 
+// EditFilterMsg asks the application to open the editor for a property so a
+// filter on it can be added.
+type EditFilterMsg struct{ Property repo.PropertySchema }
+
 func NewFilterSearchModel() FilterSearchModel {
+	keymap := newFilterKeyMap()
+
 	ti := textinput.New()
 	ti.Placeholder = "Type to search"
 	ti.Prompt = "Add filter: "
@@ -32,45 +42,39 @@ func NewFilterSearchModel() FilterSearchModel {
 	ti.CharLimit = 50
 	ti.SetWidth(20)
 	ti.ShowSuggestions = true
+	// Autocompletion uses the same bindings the help footer advertises.
+	ti.KeyMap.AcceptSuggestion = keymap.Complete
+	ti.KeyMap.NextSuggestion = keymap.NextSuggestion
+	ti.KeyMap.PrevSuggestion = keymap.PrevSuggestion
 
-	repository := repo.Repository{}
+	properties := make(map[string]repo.PropertySchema)
+	var suggestions []string
+	for _, property := range repo.Schema() {
+		if !isSupportedPropertyType(property.Type) {
+			continue
+		}
+		suggestions = append(suggestions, property.Name)
+		properties[property.Name] = property
+	}
+	ti.SetSuggestions(suggestions)
 
 	return FilterSearchModel{
 		textinput:  ti,
-		repository: repository,
-		properties: make(map[string]Property),
+		keymap:     keymap,
+		properties: properties,
 	}
 }
 
-// EditFilterMsg asks the application to open the editor for a property so a
-// filter on it can be added.
-type EditFilterMsg struct{ Property Property }
-
 func (m FilterSearchModel) Init() tea.Cmd {
-	return tea.Batch(getFilters, textinput.Blink)
+	return textinput.Blink
 }
 
 func (m FilterSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "enter":
-			_, exists := m.CurrentPropertySuggestion()
-			if exists {
-				return m, m.SendEditFilterMsg
-			}
-			return m, nil
+	if msg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(msg, m.keymap.Select) {
+		if _, exists := m.CurrentPropertySuggestion(); exists {
+			return m, m.SendEditFilterMsg
 		}
-	case filtersListMsg:
-		var suggestions []string
-		for _, r := range msg.Properties {
-			if !isSupportedPropertyType(r.Type) {
-				continue
-			}
-			suggestions = append(suggestions, r.Name)
-			m.properties[r.Name] = Property{r.Name, r.Description, r.Type}
-		}
-		m.textinput.SetSuggestions(suggestions)
+		return m, nil
 	}
 
 	var cmd tea.Cmd
@@ -89,12 +93,11 @@ func (m FilterSearchModel) LookupDescription() string {
 	prop, exists := m.properties[m.textinput.CurrentSuggestion()]
 	if exists {
 		return prop.Description
-	} else {
-		return ""
 	}
+	return ""
 }
 
-func (m FilterSearchModel) CurrentPropertySuggestion() (Property, bool) {
+func (m FilterSearchModel) CurrentPropertySuggestion() (repo.PropertySchema, bool) {
 	prop, exists := m.properties[m.textinput.CurrentSuggestion()]
 	return prop, exists
 }
@@ -102,11 +105,4 @@ func (m FilterSearchModel) CurrentPropertySuggestion() (Property, bool) {
 func (m FilterSearchModel) SendEditFilterMsg() tea.Msg {
 	property, _ := m.CurrentPropertySuggestion()
 	return EditFilterMsg{Property: property}
-}
-
-func getFilters() tea.Msg {
-	rq := repo.Repository{}
-	rp := repo.NewRepoConfig(rq)
-
-	return filtersListMsg(rp)
 }

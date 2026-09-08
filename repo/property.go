@@ -65,19 +65,12 @@ func NewRepoProperty(name string, group string, value interface{}, typeStr strin
 	return RepoProperty{Name: name, Group: group, Value: value, Type: typeStr, Description: description}
 }
 
+// ToProperties flattens a Repository into its properties keyed by name. The
+// names, groups and types match Schema; this adds the values.
 func ToProperties(r Repository) map[string]RepoProperty {
-	var properties []RepoProperty
-	t := reflect.TypeOf(r)
-	v := reflect.ValueOf(r)
+	properties := repositoryProperties(r)
 
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		value := v.Field(i)
-
-		properties = append(properties, processField(field, value)...)
-	}
-
-	propertiesMap := make(map[string]RepoProperty)
+	propertiesMap := make(map[string]RepoProperty, len(properties))
 	for _, p := range properties {
 		propertiesMap[p.Name] = p
 	}

@@ -54,3 +54,27 @@ func TestSimpleItemDelegate_RenderSelectedDiffersFromUnselected(t *testing.T) {
 
 	assert.NotEqual(t, selected.String(), unselected.String())
 }
+
+func TestSimpleItem_String(t *testing.T) {
+	assert.Equal(t, "hello", SimpleItem("hello").String())
+}
+
+// stringerItem is a list item carrying extra data that renders via String().
+type stringerItem struct {
+	label string
+	data  int
+}
+
+func (i stringerItem) FilterValue() string { return "" }
+func (i stringerItem) String() string      { return i.label }
+
+func TestSimpleItemDelegate_RendersAnyStringer(t *testing.T) {
+	items := []list.Item{stringerItem{label: "custom", data: 42}}
+	m := list.New(items, SimpleItemDelegate{}, 40, 10)
+
+	var buf bytes.Buffer
+	SimpleItemDelegate{}.Render(&buf, m, 0, items[0])
+
+	assert.Contains(t, buf.String(), "custom")
+	assert.NotContains(t, buf.String(), "invalid item type")
+}

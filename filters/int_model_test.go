@@ -214,3 +214,32 @@ func TestIntModel_View_ShowsValidationErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestIntModel_HelpView(t *testing.T) {
+	m := NewIntModel("Stars", 0, 10, 120, 40)
+
+	content := plain(m.HelpView())
+
+	for _, want := range []string{"next field", "apply", "back"} {
+		assert.Contains(t, content, want)
+	}
+	assert.NotContains(t, content, "toggle", "the int editor has nothing to toggle")
+}
+
+func TestIntModel_SetDimensions_ResizesHelp(t *testing.T) {
+	m := NewIntModel("Stars", 0, 10, 60, 40)
+
+	m.SetDimensions(100, 50)
+
+	assert.Equal(t, 100, m.help.Width())
+}
+
+func TestIntModel_View_TitleIsJustTheName(t *testing.T) {
+	m := NewIntModel("Stargazer Count", 0, 10, 100, 40)
+
+	content := plain(m.View())
+
+	assert.Contains(t, content, "Stargazer Count")
+	assert.NotContains(t, content, "w:", "the title should not include debugging dimensions")
+	assert.NotContains(t, content, "h:")
+}

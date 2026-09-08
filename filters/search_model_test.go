@@ -9,28 +9,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newSearchModelWithProperties(t *testing.T) FilterSearchModel {
-	t.Helper()
-
-	m := NewFilterSearchModel()
-	msg := filtersListMsg(repo.RepoConfig{
-		Properties: map[string]repo.RepoProperty{
-			"Name":      {Name: "Name", Type: "string", Description: "The name of the repository."},
-			"Url":       {Name: "Url", Type: "string", Description: "The HTTP URL."},
-			"Languages": {Name: "Languages", Type: "[]string", Description: "Unsupported"},
-		},
-	})
-
-	updated, _ := m.Update(msg)
-	return updated.(FilterSearchModel)
-}
-
 func typeInto(m FilterSearchModel, text string) FilterSearchModel {
 	for _, r := range text {
 		updated, _ := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(FilterSearchModel)
 	}
 	return m
+}
+
+func schemaNames() []string {
+	schema := repo.Schema()
+	names := make([]string, len(schema))
+	for i, p := range schema {
+		names[i] = p.Name
+	}
+	return names
 }
 
 func TestNewFilterSearchModel(t *testing.T) {
@@ -40,7 +33,24 @@ func TestNewFilterSearchModel(t *testing.T) {
 	assert.True(t, m.textinput.ShowSuggestions)
 	assert.Equal(t, "Type to search", m.textinput.Placeholder)
 	assert.Equal(t, "Add filter: ", m.textinput.Prompt)
-	assert.Empty(t, m.properties)
+}
+
+func TestNewFilterSearchModel_SuggestsEverySchemaProperty(t *testing.T) {
+	m := NewFilterSearchModel()
+
+	assert.Equal(t, schemaNames(), m.textinput.AvailableSuggestions(), "suggestions should follow the schema order")
+	assert.Len(t, m.properties, len(repo.Schema()))
+	for name, property := range m.properties {
+		assert.Equal(t, name, property.Name)
+		assert.True(t, isSupportedPropertyType(property.Type), "%s should have an editor", name)
+	}
+
+	assert.Equal(t, repo.PropertySchema{
+		Name:        "Is Archived",
+		Group:       "2⟭ Status",
+		Type:        "bool",
+		Description: "Indicates if the repository is archived.",
+	}, m.properties["Is Archived"])
 }
 
 func TestFilterSearchModel_Init(t *testing.T) {
@@ -48,38 +58,20 @@ func TestFilterSearchModel_Init(t *testing.T) {
 	assert.NotNil(t, m.Init())
 }
 
-func TestGetFilters(t *testing.T) {
-	msg, ok := getFilters().(filtersListMsg)
-
-	assert.True(t, ok, "getFilters should return a filtersListMsg")
-	assert.Len(t, msg.Properties, 49)
-}
-
-func TestFilterSearchModel_Update_FiltersListMsg(t *testing.T) {
-	m := newSearchModelWithProperties(t)
-
-	assert.Len(t, m.properties, 2, "only supported property types should be registered")
-	assert.Contains(t, m.properties, "Name")
-	assert.Contains(t, m.properties, "Url")
-	assert.NotContains(t, m.properties, "Languages")
-	assert.ElementsMatch(t, []string{"Name", "Url"}, m.textinput.AvailableSuggestions())
-	assert.Equal(t, Property{Name: "Name", Description: "The name of the repository.", Type: "string"}, m.properties["Name"])
-}
-
 func TestFilterSearchModel_SuggestionLookups(t *testing.T) {
-	m := newSearchModelWithProperties(t)
+	m := NewFilterSearchModel()
 
 	// Nothing typed yet so there is no current suggestion.
 	_, exists := m.CurrentPropertySuggestion()
 	assert.False(t, exists)
 	assert.Equal(t, "", m.LookupDescription())
 
-	m = typeInto(m, "N")
+	m = typeInto(m, "Is A")
 
 	prop, exists := m.CurrentPropertySuggestion()
 	assert.True(t, exists)
-	assert.Equal(t, "Name", prop.Name)
-	assert.Equal(t, "The name of the repository.", m.LookupDescription())
+	assert.Equal(t, "Is Archived", prop.Name)
+	assert.Equal(t, "Indicates if the repository is archived.", m.LookupDescription())
 
 	// Typing something that matches nothing clears the suggestion.
 	m = typeInto(m, "zzz")
@@ -88,8 +80,16 @@ func TestFilterSearchModel_SuggestionLookups(t *testing.T) {
 	assert.Equal(t, "", m.LookupDescription())
 }
 
+func TestFilterSearchModel_SuggestionIsCaseInsensitive(t *testing.T) {
+	m := typeInto(NewFilterSearchModel(), "stargazer")
+
+	prop, exists := m.CurrentPropertySuggestion()
+	assert.True(t, exists)
+	assert.Equal(t, "Stargazer Count", prop.Name)
+}
+
 func TestFilterSearchModel_Update_EnterWithoutSuggestion(t *testing.T) {
-	m := newSearchModelWithProperties(t)
+	m := NewFilterSearchModel()
 
 	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
@@ -97,28 +97,29 @@ func TestFilterSearchModel_Update_EnterWithoutSuggestion(t *testing.T) {
 }
 
 func TestFilterSearchModel_Update_EnterWithSuggestion(t *testing.T) {
-	m := typeInto(newSearchModelWithProperties(t), "U")
+	m := typeInto(NewFilterSearchModel(), "Stargazer")
 
 	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.NotNil(t, cmd)
 
 	edit, ok := cmd().(EditFilterMsg)
 	assert.True(t, ok, "expected an EditFilterMsg")
-	assert.Equal(t, Property{Name: "Url", Description: "The HTTP URL.", Type: "string"}, edit.Property)
+	assert.Equal(t, "Stargazer Count", edit.Property.Name)
+	assert.Equal(t, "int", edit.Property.Type)
 }
 
 func TestFilterSearchModel_SendEditFilterMsg(t *testing.T) {
-	m := typeInto(newSearchModelWithProperties(t), "Na")
+	m := typeInto(NewFilterSearchModel(), "Na")
 
 	edit, ok := m.SendEditFilterMsg().(EditFilterMsg)
 	assert.True(t, ok)
-	assert.Equal(t, "Name", edit.Property.Name)
+	assert.Equal(t, "Name", edit.Property.Name, "the first matching property in schema order wins")
 }
 
 func TestFilterSearchModel_View(t *testing.T) {
-	m := newSearchModelWithProperties(t)
+	m := NewFilterSearchModel()
 	assert.NotEmpty(t, plain(m.View()))
 
-	m = typeInto(m, "N")
-	assert.Contains(t, plain(m.View()), "The name of the repository.")
+	m = typeInto(m, "Is A")
+	assert.Contains(t, plain(m.View()), "Indicates if the repository is archived.")
 }
