@@ -61,8 +61,8 @@ func (m *ErrorModel) View() tea.View {
 	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, title, "", body)))
 }
 
-func (m *ErrorModel) HeaderView() tea.View {
-	return tea.NewView(TitleStyle.Render("Error"))
+func (m *ErrorModel) Breadcrumb() string {
+	return "Error"
 }
 
 func (m *ErrorModel) HelpView() tea.View {

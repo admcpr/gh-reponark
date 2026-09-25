@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"gh-reponark/repo"
 	"gh-reponark/shared"
+	"strings"
 )
 
 type BoolFilter struct {
@@ -29,4 +30,8 @@ func (f BoolFilter) Matches(property repo.RepoProperty) bool {
 
 func (f BoolFilter) String() string {
 	return fmt.Sprintf("%s = %s", f.name, shared.YesNo(f.Value))
+}
+
+func (f BoolFilter) Condition() string {
+	return strings.ToLower(shared.YesNo(f.Value))
 }

@@ -30,6 +30,11 @@ func (n *Navigator) Current() (tea.Model, error) {
 	return n.stack.Peek()
 }
 
+// Screens returns every open screen, from the first to the current one.
+func (n *Navigator) Screens() []tea.Model {
+	return n.stack.Elements()
+}
+
 func (n *Navigator) Len() int {
 	return n.stack.Len()
 }

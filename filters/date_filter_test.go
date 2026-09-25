@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -111,4 +112,22 @@ func TestDateFilterSuite(t *testing.T) {
 
 func (s *DateFilterSuite) TestString() {
 	s.Equal("test between 2024-01-01 and 2024-02-01", s.filter.String())
+}
+
+func TestDateFilter_OpenBounds(t *testing.T) {
+	cutoff := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	before := NewDateFilter("d", time.Time{}, cutoff)
+	after := NewDateFilter("d", cutoff, time.Time{})
+	early := repo.RepoProperty{Type: "time.Time", Value: cutoff.AddDate(-1, 0, 0)}
+	late := repo.RepoProperty{Type: "time.Time", Value: cutoff.AddDate(1, 0, 0)}
+
+	assert.True(t, before.Matches(early))
+	assert.False(t, before.Matches(late))
+	assert.False(t, after.Matches(early))
+	assert.True(t, after.Matches(late))
+
+	assert.Equal(t, "before 2024-01-01", before.Condition())
+	assert.Equal(t, "after 2024-01-01", after.Condition())
+	assert.Equal(t, "2024-01-01 – 2025-01-01", NewDateFilter("d", cutoff, cutoff.AddDate(1, 0, 0)).Condition())
+	assert.Equal(t, "any", NewDateFilter("d", time.Time{}, time.Time{}).Condition())
 }

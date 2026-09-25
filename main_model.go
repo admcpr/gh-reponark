@@ -7,7 +7,6 @@ import (
 	"gh-reponark/org"
 	"gh-reponark/shared"
 	"gh-reponark/user"
-	"reflect"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -50,7 +49,6 @@ func (m MainModel) Init() tea.Cmd {
 //
 //	user  --OpenOrgMsg-->      org
 //	org   --OpenFiltersMsg-->  filters
-//	filters --EditFilterMsg--> filter editor (bool/int/date/string)
 //	any   --ErrorMsg-->        error screen
 //	any   --PreviousMsg-->     back
 func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -71,15 +69,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.open(org.NewModel(m.svc, msg.Key, contentWidth, contentHeight))
 
 	case filters.OpenFiltersMsg:
-		return m, m.open(filters.NewModel(msg.Filters, contentWidth, contentHeight))
-
-	case filters.EditFilterMsg:
-		editor := filters.NewFilterModel(msg.Property, contentWidth, contentHeight)
-		if editor == nil {
-			// The property type has no editor; stay where we are.
-			return m, nil
-		}
-		return m, m.open(editor)
+		return m, m.open(filters.NewModel(msg.Filters, msg.Repos, contentWidth, contentHeight))
 
 	case shared.PreviousMsg:
 		return m, m.Previous(msg)
@@ -113,21 +103,15 @@ func (m MainModel) View() tea.View {
 		MaxHeight(layout.interiorHeight).
 		Render(childView)
 
+	// The top edge is drawn separately so it can carry the breadcrumb.
 	body := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
+		Border(lipgloss.NormalBorder(), false, true, true, true).
 		BorderForeground(shared.AppColors.Blue).
 		Width(layout.bodyWidth).
-		Height(layout.bodyHeight).
+		Height(layout.bodyHeight - 1).
 		Render(lipgloss.Place(layout.interiorWidth, layout.interiorHeight, lipgloss.Left, lipgloss.Top, cappedChild))
 
-	sections := []string{}
-	if layout.header != "" {
-		sections = append(sections, layout.header)
-	}
-	sections = append(sections, body)
-	sections = append(sections, layout.footer)
-
-	stacked := lipgloss.JoinVertical(lipgloss.Left, sections...)
+	stacked := lipgloss.JoinVertical(lipgloss.Left, layout.header, body, layout.footer)
 	framed := lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, stacked)
 	v := tea.NewView(framed)
 	v.AltScreen = true
@@ -169,25 +153,64 @@ func viewContent(v tea.View) string {
 
 func (m MainModel) contentDimensions() (int, int) {
 	width := shared.Max(1, m.width-2)
-	height := shared.Max(1, m.height-4)
+	height := shared.Max(1, m.height-3) // top and bottom edges, and the footer
 	return width, height
 }
 
-func (m MainModel) renderHeader(model tea.Model) string {
-	if hp, ok := model.(shared.HeaderProvider); ok {
-		return viewContent(hp.HeaderView())
+// breadcrumb names every open screen that has a title, from the first to the
+// current one.
+func (m MainModel) breadcrumb() []string {
+	crumbs := []string{"reponark"}
+	for _, screen := range m.nav.Screens() {
+		if titled, ok := screen.(shared.Titled); ok && titled.Breadcrumb() != "" {
+			crumbs = append(crumbs, titled.Breadcrumb())
+		}
+	}
+	return crumbs
+}
+
+// renderTopEdge draws the frame's top border with the breadcrumb on the left
+// and the current screen's status on the right, e.g.
+//
+//	┌─ reponark › acme-corp › Filters ──────────── 37 of 148 repos ─┐
+//
+// When space runs short the status goes first, then the oldest crumbs.
+func (m MainModel) renderTopEdge(model tea.Model, width int) string {
+	border := lipgloss.NewStyle().Foreground(shared.AppColors.Blue)
+	separator := shared.DimStyle.Render(" › ")
+
+	status := ""
+	if sp, ok := model.(shared.StatusProvider); ok && sp.Status() != "" {
+		status = " " + shared.DimStyle.Render(sp.Status()) + " "
 	}
 
-	typeOf := reflect.TypeOf(model)
-	if typeOf.Kind() == reflect.Ptr {
-		typeOf = typeOf.Elem()
+	crumbs := m.breadcrumb()
+	render := func(crumbs []string) string {
+		parts := make([]string, len(crumbs))
+		for i, crumb := range crumbs {
+			if i == len(crumbs)-1 {
+				parts[i] = shared.StrongStyle.Render(crumb)
+			} else {
+				parts[i] = shared.DimStyle.Render(crumb)
+			}
+		}
+		return " " + strings.Join(parts, separator) + " "
 	}
 
-	if typeOf.Name() == "" {
-		return ""
+	// Corners and the rule either side of the title and status.
+	const chrome = 6
+	title := render(crumbs)
+	if lipgloss.Width(title)+lipgloss.Width(status)+chrome > width {
+		status = ""
+	}
+	for len(crumbs) > 1 && lipgloss.Width(title)+chrome > width {
+		crumbs = crumbs[1:]
+		title = render(append([]string{"…"}, crumbs...))
 	}
 
-	return shared.LayoutHeaderStyle.Render(typeOf.Name())
+	fill := shared.Max(0, width-lipgloss.Width(title)-lipgloss.Width(status)-4)
+	edge := border.Render("┌─") + title + border.Render(strings.Repeat("─", fill)) + status + border.Render("─┐")
+	return shared.Fit(edge, width)
 }
 
 func (m MainModel) renderFooter(model tea.Model) string {
@@ -206,7 +229,6 @@ func (m MainModel) renderFooter(model tea.Model) string {
 type layoutParts struct {
 	header         string
 	footer         string
-	headerHeight   int
 	footerHeight   int
 	bodyWidth      int
 	bodyHeight     int
@@ -214,14 +236,10 @@ type layoutParts struct {
 	interiorHeight int
 }
 
+// computeLayout sizes the frame: the body, whose top edge is the header,
+// fills the height left over by the footer.
 func (m MainModel) computeLayout(child tea.Model) layoutParts {
 	bodyWidth := shared.Max(4, m.width)
-
-	header := strings.TrimSpace(m.renderHeader(child))
-	if header != "" {
-		header = lipgloss.NewStyle().Width(bodyWidth).Render(header)
-	}
-	headerHeight := lipgloss.Height(header)
 
 	footerRaw := m.renderFooter(child)
 	footerHeight := lipgloss.Height(footerRaw)
@@ -233,30 +251,15 @@ func (m MainModel) computeLayout(child tea.Model) layoutParts {
 	}
 	footer := lipgloss.NewStyle().Width(bodyWidth).Height(footerHeight).Render(footerRaw)
 
-	availableHeight := m.height - headerHeight - footerHeight
-	if availableHeight < 1 {
-		availableHeight = 1
-	}
-	bodyHeight := shared.Max(3, availableHeight)
-	// Ensure we never exceed the terminal height so footer stays visible.
-	maxBody := m.height - headerHeight - footerHeight
-	if maxBody < 1 {
-		maxBody = 1
-	}
-	if bodyHeight > maxBody {
-		bodyHeight = maxBody
-	}
-	interiorWidth := shared.Max(1, bodyWidth-2)
-	interiorHeight := shared.Max(1, bodyHeight-2)
+	bodyHeight := shared.Max(3, m.height-footerHeight)
 
 	return layoutParts{
-		header:         header,
+		header:         m.renderTopEdge(child, bodyWidth),
 		footer:         footer,
-		headerHeight:   headerHeight,
 		footerHeight:   footerHeight,
 		bodyWidth:      bodyWidth,
 		bodyHeight:     bodyHeight,
-		interiorWidth:  interiorWidth,
-		interiorHeight: interiorHeight,
+		interiorWidth:  shared.Max(1, bodyWidth-2),
+		interiorHeight: shared.Max(1, bodyHeight-2),
 	}
 }

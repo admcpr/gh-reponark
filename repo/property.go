@@ -20,8 +20,11 @@ type RepoConfig struct {
 
 func NewRepoConfig(r Repository) RepoConfig {
 	propertyGroups := make(map[string][]RepoProperty)
-	properties := ToProperties(r)
-	for _, p := range properties {
+	properties := make(map[string]RepoProperty)
+	// Walk the properties in declaration order so each group lists them the
+	// way Repository declares them.
+	for _, p := range repositoryProperties(r) {
+		properties[p.Name] = p
 		propertyGroups[p.Group] = append(propertyGroups[p.Group], p)
 	}
 	keys := make([]string, 0, len(propertyGroups))
@@ -36,6 +39,30 @@ func NewRepoConfig(r Repository) RepoConfig {
 		PropertyGroups: propertyGroups,
 		GroupKeys:      keys,
 	}
+}
+
+// Bool returns the named boolean property, or false if it is not a bool.
+func (c RepoConfig) Bool(name string) bool {
+	value, _ := c.Properties[name].Value.(bool)
+	return value
+}
+
+// Int returns the named integer property, or 0 if it is not an int.
+func (c RepoConfig) Int(name string) int {
+	value, _ := c.Properties[name].Value.(int)
+	return value
+}
+
+// Text returns the named string property, or "" if it is not a string.
+func (c RepoConfig) Text(name string) string {
+	value, _ := c.Properties[name].Value.(string)
+	return value
+}
+
+// Time returns the named time property, or the zero time if it is not one.
+func (c RepoConfig) Time(name string) time.Time {
+	value, _ := c.Properties[name].Value.(time.Time)
+	return value
 }
 
 type RepoProperty struct {
