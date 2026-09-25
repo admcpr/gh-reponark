@@ -82,6 +82,11 @@ func (s *ModelStack) PeekBelowTop() (tea.Model, error) {
 	return s.elements[len(s.elements)-2], nil
 }
 
+// Elements returns the models from the bottom of the stack to the top.
+func (s *ModelStack) Elements() []tea.Model {
+	return append([]tea.Model(nil), s.elements...)
+}
+
 func (s *ModelStack) Len() int {
 	return len(s.elements)
 }

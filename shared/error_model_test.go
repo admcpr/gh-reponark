@@ -95,7 +95,7 @@ func TestErrorModel_View(t *testing.T) {
 func TestErrorModel_HeaderAndHelpViews(t *testing.T) {
 	m := NewErrorModel(errors.New("boom"), 80, 24)
 
-	assert.Contains(t, ansi.Strip(fmt.Sprint(m.HeaderView().Content)), "Error")
+	assert.Equal(t, "Error", m.Breadcrumb())
 	assert.Contains(t, ansi.Strip(fmt.Sprint(m.HelpView().Content)), "back")
 }
 

@@ -193,12 +193,12 @@ func TestModel_View_ZeroHeight(t *testing.T) {
 	assert.NotPanics(t, func() { m.View() })
 }
 
-func TestModel_HeaderView(t *testing.T) {
+func TestModel_Status(t *testing.T) {
 	m := newTestModel()
-	assert.Contains(t, plain(m.HeaderView()), "Organizations")
+	assert.Equal(t, "signing in", m.Status())
 
 	m.SetUser(newTestUser("octocat"))
-	assert.Contains(t, plain(m.HeaderView()), "User: octocat")
+	assert.Equal(t, "signed in as octocat", m.Status())
 }
 
 func TestModel_HelpView(t *testing.T) {

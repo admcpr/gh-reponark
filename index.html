@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        #board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+        }
+        .cell {
+            background-color: #f0f0f0;
+            border: 1px solid #999;
+            font-size: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="board">
+        <!-- Cells will be inserted here -->
+    </div>
+    <div id="status"></div>
+
+    <script>
+        const board = [
+            ['', '', ''],
+            ['', '', ''],
+            ['', '', '']
+        ];
+
+        let currentPlayer = 'X';
+
+        const cells = document.querySelectorAll('.cell');
+        cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+
+        function handleCellClick() {
+            const cellIndex = Array.from(cells).indexOf(this);
+            const row = Math.floor(cellIndex / 3);
+            const col = cellIndex % 3;
+
+            if (board[row][col] === '') {
+                board[row][col] = currentPlayer;
+                this.textContent = currentPlayer;
+                checkWinner();
+                currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            }
+        }
+
+        function checkWinner() {
+            const winningCombinations = [
+                [[0, 0], [0, 1], [0, 2]], // top row
+                [[1, 0], [1, 1], [1, 2]], // middle row
+                [[2, 0], [2, 1], [2, 2]], // bottom row
+                [[0, 0], [1, 0], [2, 0]], // left column
+                [[0, 1], [1, 1], [2, 1]], // middle column
+                [[0, 2], [1, 2], [2, 2]], // right column
+                [[0, 0], [1, 1], [2, 2]], // diagonal /
+                [[0, 2], [1, 1], [2, 0]]  // diagonal \
+            ];
+
+            for (const combo of winningCombinations) {
+                const [a, b, c] = combo;
+                if (board[a[0]][a[1]] && board[a[0]][a[1]] === board[b[0]][b[1]] && board[a[0]][a[1]] === board[c[0]][c[1]]) {
+                    const winner = board[a[0]][a[1]];
+                    alert(`Player ${winner} wins!`);
+                    resetGame();
+                    return;
+                }
+            }
+
+            if (!board.flat().includes('')) {
+                alert("It's a tie!");
+                resetGame();
+            }
+        }
+
+        function resetGame() {
+            board = [
+                ['', '', ''],
+                ['', '', ''],
+                ['', '', '']
+            ];
+            cells.forEach(cell => {
+                cell.textContent = '';
+                cell.style.backgroundColor = '#f0f0f0';
+            });
+            currentPlayer = 'X';
+            document.getElementById('status').textContent = '';
+        }
+    </script>
+</body>
+</html>

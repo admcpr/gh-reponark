@@ -4,6 +4,7 @@ import (
 	"gh-reponark/repo"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -63,4 +64,9 @@ func (s *BoolFilterSuite) TestString() {
 
 func TestBoolFilterSuite(t *testing.T) {
 	suite.Run(t, new(BoolFilterSuite))
+}
+
+func TestBoolFilter_Condition(t *testing.T) {
+	assert.Equal(t, "yes", NewBoolFilter("Is Fork", true).Condition())
+	assert.Equal(t, "no", NewBoolFilter("Is Fork", false).Condition())
 }

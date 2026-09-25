@@ -1,6 +1,10 @@
 package filters
 
-import "gh-reponark/repo"
+import (
+	"fmt"
+
+	"gh-reponark/repo"
+)
 
 // StringFilter matches string properties via substring (case-insensitive).
 type StringFilter struct {
@@ -41,4 +45,8 @@ func (f StringFilter) FilterRepos(repos []repo.RepoConfig) []repo.RepoConfig {
 		}
 	}
 	return filtered
+}
+
+func (f StringFilter) Condition() string {
+	return fmt.Sprintf("contains %q", f.value)
 }

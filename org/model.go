@@ -11,7 +11,6 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -27,6 +26,18 @@ type repositoryPageMsg github.RepositoryPage
 
 // repositoryBatchMsg carries the configuration of one batch of repositories.
 type repositoryBatchMsg []repo.Repository
+
+// viewMode is how the repositories are laid out.
+type viewMode int
+
+const (
+	// listView shows one repository per row beside an inspector for the
+	// selected one.
+	listView viewMode = iota
+	// matrixView shows every repository against every property in the
+	// active group, for spotting the ones set up differently.
+	matrixView
+)
 
 type Model struct {
 	svc github.Service
@@ -45,8 +56,18 @@ type Model struct {
 
 	help      help.Model
 	keymap    orgKeyMap
-	repoList  list.Model
 	repoModel repo.Model
+
+	// The repositories that pass the filters, which one is selected, and the
+	// first row and column each view has scrolled to. Both views share the
+	// selection, so switching between them keeps your place.
+	visible      []repo.RepoConfig
+	cursor       int
+	mode         viewMode
+	inspecting   bool // the list view's keys move through properties, not repos
+	listOffset   int
+	matrixOffset int
+	columnOffset int
 
 	width  int
 	height int
@@ -69,62 +90,64 @@ func NewModel(svc github.Service, orgKey shared.OrgKey, width, height int) *Mode
 		repoModel: repo.NewModel(width/2, height),
 		progress:  progress.New(progress.WithoutPercentage()),
 	}
-	m.repoList = m.newRepoList(nil)
+	m.repoModel.SetDimensions(m.inspectorWidth(), height)
 
 	return m
-}
-
-// newRepoList builds the repository list with the shared key bindings.
-func (m *Model) newRepoList(items []list.Item) list.Model {
-	repoList := list.New(items, shared.SimpleItemDelegate{}, m.width/2, m.height-2)
-	repoList.Title = fmt.Sprintf("Organization: %s ", m.Title)
-	repoList.Styles.Title = shared.TitleStyle
-	repoList.SetStatusBarItemName("Repository", "Repositories")
-	repoList.SetShowHelp(false)
-	repoList.SetShowTitle(true)
-	// The list moves with the same bindings the help footer advertises.
-	repoList.KeyMap.CursorUp = m.keymap.Up
-	repoList.KeyMap.CursorDown = m.keymap.Down
-	return repoList
 }
 
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
 	m.help.SetWidth(width)
+	m.repoModel.SetDimensions(m.inspectorWidth(), height)
+	m.scrollToCursor()
 }
 
-// repoItem is a list entry that carries the repository it stands for, so the
-// selection never has to be mapped back to an index in another slice.
-type repoItem struct {
-	config repo.RepoConfig
+// applyFilters rebuilds the visible repositories from the ones that pass the
+// current filters and selects the first of them.
+func (m *Model) applyFilters() {
+	m.visible = m.filters.FilterRepos(m.repos)
+	m.cursor, m.listOffset, m.matrixOffset = 0, 0, 0
+	m.selectionChanged()
 }
 
-func (i repoItem) FilterValue() string { return "" }
-func (i repoItem) String() string      { return i.config.Name }
-
-// populateRepoList rebuilds the list from the repositories that pass the
-// current filters and points the detail pane at the first of them.
-func (m *Model) populateRepoList() {
-	filteredRepositories := m.filters.FilterRepos(m.repos)
-	items := make([]list.Item, len(filteredRepositories))
-	for i, config := range filteredRepositories {
-		items[i] = repoItem{config: config}
+// selectedRepo returns the highlighted repository, if any.
+func (m *Model) selectedRepo() (repo.RepoConfig, bool) {
+	if m.cursor < 0 || m.cursor >= len(m.visible) {
+		return repo.RepoConfig{}, false
 	}
+	return m.visible[m.cursor], true
+}
 
-	m.repoList = m.newRepoList(items)
+// moveCursor selects the repository delta rows away, stopping at either end.
+func (m *Model) moveCursor(delta int) {
+	if len(m.visible) == 0 {
+		return
+	}
+	m.cursor = shared.Max(0, shared.Min(m.cursor+delta, len(m.visible)-1))
+	m.selectionChanged()
+}
+
+// selectionChanged points the inspector at the selected repository and
+// scrolls both views so it stays on screen.
+func (m *Model) selectionChanged() {
 	if selected, ok := m.selectedRepo(); ok {
 		m.repoModel.SelectRepo(selected)
 	}
+	m.scrollToCursor()
 }
 
-// selectedRepo returns the repository highlighted in the list, if any.
-func (m *Model) selectedRepo() (repo.RepoConfig, bool) {
-	item, ok := m.repoList.SelectedItem().(repoItem)
-	if !ok {
-		return repo.RepoConfig{}, false
+func (m *Model) scrollToCursor() {
+	m.listOffset = shared.ScrollOffset(m.listOffset, m.cursor, m.listRows(), len(m.visible))
+	m.matrixOffset = shared.ScrollOffset(m.matrixOffset, m.cursor, m.matrixRows(), len(m.visible))
+}
+
+// pageSize is how many rows the current view shows at once.
+func (m *Model) pageSize() int {
+	if m.mode == matrixView {
+		return m.matrixRows()
 	}
-	return item.config, true
+	return m.listRows()
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -195,14 +218,12 @@ func (m *Model) finishLoading() tea.Cmd {
 		return m.repos[i].Name < m.repos[j].Name
 	})
 	if len(m.repos) > 0 {
-		m.populateRepoList()
+		m.applyFilters()
 	}
 	return m.progress.SetPercent(1.0)
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
 	switch msg := msg.(type) {
 	case repositoryPageMsg:
 		m.repoCount = msg.TotalCount
@@ -237,7 +258,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case filters.FiltersMsg:
 		m.filters = filters.FilterMap(msg)
-		m.populateRepoList()
+		m.applyFilters()
 		return m, nil
 
 	case progress.FrameMsg:
@@ -246,29 +267,90 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyPressMsg:
-		repoKeys := m.repoModel.Keys()
-		switch {
-		case key.Matches(msg, m.keymap.Filters):
-			return m, func() tea.Msg {
-				return filters.OpenFiltersMsg{Filters: m.filters}
-			}
-		case key.Matches(msg, m.keymap.Back):
-			return m, func() tea.Msg {
-				return shared.PreviousMsg{}
-			}
-		case key.Matches(msg, repoKeys.NextTab, repoKeys.PrevTab):
-			repoModel, cmd := m.repoModel.Update(msg)
-			m.repoModel = repoModel.(repo.Model)
-			return m, cmd
-		default:
-			m.repoList, cmd = m.repoList.Update(msg)
-			return m, cmd
-		}
-	default:
-		m.repoList, cmd = m.repoList.Update(msg)
+		return m, m.handleKey(msg)
 	}
 
-	return m, cmd
+	return m, nil
+}
+
+func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	repoKeys := m.repoModel.Keys()
+	listMode := m.mode == listView
+	switch {
+	case key.Matches(msg, m.keymap.Filters):
+		return func() tea.Msg {
+			return filters.OpenFiltersMsg{Filters: m.filters, Repos: m.repos}
+		}
+	case m.inspecting && key.Matches(msg, m.keymap.Back, m.keymap.Left):
+		m.setInspecting(false)
+	case key.Matches(msg, m.keymap.Back):
+		return func() tea.Msg {
+			return shared.PreviousMsg{}
+		}
+	case key.Matches(msg, m.keymap.ToggleView):
+		m.toggleView()
+	case key.Matches(msg, m.keymap.Inspect), listMode && key.Matches(msg, m.keymap.Right):
+		m.mode = listView
+		m.setInspecting(true)
+		m.scrollToCursor()
+	case !listMode && key.Matches(msg, m.keymap.Left):
+		m.repoModel.SelectProperty(m.repoModel.ActiveProperty() - 1)
+	case !listMode && key.Matches(msg, m.keymap.Right):
+		m.repoModel.SelectProperty(m.repoModel.ActiveProperty() + 1)
+	case key.Matches(msg, repoKeys.NextTab, repoKeys.PrevTab):
+		repoModel, cmd := m.repoModel.Update(msg)
+		m.repoModel = repoModel.(repo.Model)
+		return cmd
+	default:
+		if delta, ok := m.movement(msg); ok {
+			if m.inspecting {
+				m.repoModel.SelectProperty(m.repoModel.ActiveProperty() + delta)
+			} else {
+				m.moveCursor(delta)
+			}
+		}
+	}
+	return nil
+}
+
+// movement is how far a vertical movement key moves the focused cursor.
+// Moves past either end are clamped by whoever applies them.
+func (m *Model) movement(msg tea.KeyPressMsg) (int, bool) {
+	page, all := m.pageSize(), len(m.visible)
+	if m.inspecting {
+		page, all = m.repoModel.PageSize(), len(m.repoModel.ActiveGroup().Properties)
+	}
+	switch {
+	case key.Matches(msg, m.keymap.Up):
+		return -1, true
+	case key.Matches(msg, m.keymap.Down):
+		return 1, true
+	case key.Matches(msg, m.keymap.PageUp):
+		return -page, true
+	case key.Matches(msg, m.keymap.PageDown):
+		return page, true
+	case key.Matches(msg, m.keymap.Top):
+		return -all, true
+	case key.Matches(msg, m.keymap.Bottom):
+		return all, true
+	}
+	return 0, false
+}
+
+// setInspecting moves focus between the repo list and the inspector.
+func (m *Model) setInspecting(inspecting bool) {
+	m.inspecting = inspecting
+	m.repoModel.SetFocused(inspecting)
+}
+
+func (m *Model) toggleView() {
+	m.setInspecting(false)
+	if m.mode == listView {
+		m.mode = matrixView
+	} else {
+		m.mode = listView
+	}
+	m.scrollToCursor()
 }
 
 func (m *Model) View() tea.View {
@@ -276,59 +358,94 @@ func (m *Model) View() tea.View {
 		return m.ProgressView()
 	}
 
-	selected, ok := m.selectedRepo()
-	if !ok {
-		repoList := shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoList.View())
-		empty := shared.AppStyle.Width(shared.Half(m.width)).Render("No repositories found")
-		return tea.NewView(fmt.Sprint(lipgloss.JoinHorizontal(lipgloss.Top, repoList, empty)))
+	if len(m.visible) == 0 {
+		return tea.NewView(shared.DimStyle.Render("No repositories found"))
 	}
 
-	m.repoModel.SelectRepo(selected)
-
-	var repoList = shared.AppStyle.Width(shared.Half(m.width)).Render(m.repoList.View())
-	var settings = shared.AppStyle.Width(shared.Half(m.width)).Render(fmt.Sprint(m.repoModel.View().Content))
-	var rightPanel = lipgloss.JoinVertical(lipgloss.Center, settings)
-
-	var views = []string{repoList, rightPanel}
-
-	return tea.NewView(fmt.Sprint(lipgloss.JoinHorizontal(lipgloss.Top, views...)))
+	if m.mode == matrixView {
+		return tea.NewView(m.matrixView())
+	}
+	return tea.NewView(m.listView())
 }
 
-func (m Model) HeaderView() tea.View {
-	label := m.Title
-	if label == "" {
-		label = "Repositories"
+// Breadcrumb names the organization or user whose repositories are shown.
+func (m Model) Breadcrumb() string {
+	if m.Title == "" {
+		return "Repositories"
 	}
+	return m.Title
+}
 
-	if m.repoCount > 0 {
-		label = fmt.Sprintf("%s (%d repos)", label, m.repoCount)
+// Status counts the repositories, and how many pass the filters when any are
+// applied.
+func (m Model) Status() string {
+	switch {
+	case m.progress.Percent() < 1:
+		return "loading repositories"
+	case len(m.filters) > 0:
+		return fmt.Sprintf("%d of %d repos · %s", len(m.visible), len(m.repos), plural(len(m.filters), "filter"))
+	default:
+		return plural(len(m.repos), "repo")
 	}
+}
 
-	prefix := "Organization"
-	if m.isUser {
-		prefix = "User"
+// plural formats a count with its noun, e.g. "1 repo" or "3 repos".
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", noun)
 	}
-
-	title := fmt.Sprintf("%s: %s", prefix, label)
-	return tea.NewView(shared.TitleStyle.Render(title))
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 func (m Model) HelpView() tea.View {
 	return tea.NewView(m.help.View(m.helpKeys()))
 }
 
-// helpKeys lists every binding this screen handles, including the ones it
-// forwards to the detail pane, in the order they appear in the footer.
+// helpKeys lists the bindings for the current view in the order they appear
+// in the footer. Pairs of keys that do the same thing in opposite directions
+// share one entry so the footer fits on a line.
 func (m Model) helpKeys() shared.KeyBindings {
 	repoKeys := m.repoModel.Keys()
+	tabs := helpOnly(repoKeys.NextTab, repoKeys.PrevTab, "tab", "group")
+	if m.mode == matrixView {
+		return shared.KeyBindings{
+			helpOnly(m.keymap.Down, m.keymap.Up, "j/k", "repo"),
+			helpOnly(m.keymap.Left, m.keymap.Right, "h/l", "column"),
+			tabs,
+			withHelp(m.keymap.Inspect, "open"),
+			withHelp(m.keymap.ToggleView, "list"),
+			m.keymap.Filters,
+			m.keymap.Back,
+		}
+	}
+	if m.inspecting {
+		return shared.KeyBindings{
+			helpOnly(m.keymap.Down, m.keymap.Up, "j/k", "property"),
+			helpOnly(m.keymap.Left, m.keymap.Back, "h/esc", "repos"),
+			tabs,
+			withHelp(m.keymap.ToggleView, "matrix"),
+			m.keymap.Filters,
+		}
+	}
 	return shared.KeyBindings{
-		m.keymap.Up,
-		m.keymap.Down,
-		repoKeys.NextTab,
-		repoKeys.PrevTab,
+		helpOnly(m.keymap.Down, m.keymap.Up, "j/k", "repo"),
+		helpOnly(m.keymap.Right, m.keymap.Inspect, "l/enter", "inspect"),
+		tabs,
+		withHelp(m.keymap.ToggleView, "matrix"),
 		m.keymap.Filters,
 		m.keymap.Back,
 	}
+}
+
+// helpOnly combines two bindings into one footer entry.
+func helpOnly(a, b key.Binding, keys, desc string) key.Binding {
+	return key.NewBinding(key.WithKeys(append(a.Keys(), b.Keys()...)...), key.WithHelp(keys, desc))
+}
+
+// withHelp returns a copy of binding with a different description.
+func withHelp(binding key.Binding, desc string) key.Binding {
+	binding.SetHelp(binding.Help().Key, desc)
+	return binding
 }
 
 func (m *Model) ProgressView() tea.View {
@@ -337,13 +454,21 @@ func (m *Model) ProgressView() tea.View {
 	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Center, text, m.progress.View())))
 }
 
-// orgKeyMap holds the bindings the repository list screen handles itself. Tab
-// switching is owned by the detail pane's repo.KeyMap.
+// orgKeyMap holds the bindings the repository screen handles itself. Tab and
+// property switching are owned by the inspector's repo.KeyMap.
 type orgKeyMap struct {
-	Up      key.Binding
-	Down    key.Binding
-	Filters key.Binding
-	Back    key.Binding
+	Up         key.Binding
+	Down       key.Binding
+	PageUp     key.Binding
+	PageDown   key.Binding
+	Top        key.Binding
+	Bottom     key.Binding
+	Left       key.Binding
+	Right      key.Binding
+	ToggleView key.Binding
+	Inspect    key.Binding
+	Filters    key.Binding
+	Back       key.Binding
 }
 
 func newOrgKeyMap() orgKeyMap {
@@ -355,6 +480,38 @@ func newOrgKeyMap() orgKeyMap {
 		Down: key.NewBinding(
 			key.WithKeys("down", "j"),
 			key.WithHelp("↓/j", "down"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup", "ctrl+u"),
+			key.WithHelp("pgup", "page up"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown", "ctrl+d"),
+			key.WithHelp("pgdn", "page down"),
+		),
+		Top: key.NewBinding(
+			key.WithKeys("home", "g"),
+			key.WithHelp("g", "first"),
+		),
+		Bottom: key.NewBinding(
+			key.WithKeys("end", "G"),
+			key.WithHelp("G", "last"),
+		),
+		Left: key.NewBinding(
+			key.WithKeys("left", "h"),
+			key.WithHelp("←/h", "column left"),
+		),
+		Right: key.NewBinding(
+			key.WithKeys("right", "l"),
+			key.WithHelp("→/l", "column right"),
+		),
+		ToggleView: key.NewBinding(
+			key.WithKeys("v"),
+			key.WithHelp("v", "switch view"),
+		),
+		Inspect: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "inspect"),
 		),
 		Filters: key.NewBinding(
 			key.WithKeys("f", "F"),

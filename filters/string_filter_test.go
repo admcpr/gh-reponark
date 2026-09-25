@@ -4,6 +4,7 @@ import (
 	"gh-reponark/repo"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -110,4 +111,8 @@ func (s *StringFilterSuite) TestFilterReposEmptyInput() {
 
 func TestStringFilterSuite(t *testing.T) {
 	suite.Run(t, new(StringFilterSuite))
+}
+
+func TestStringFilter_Condition(t *testing.T) {
+	assert.Equal(t, `contains "go"`, NewStringFilter("Primary Language", "go").Condition())
 }

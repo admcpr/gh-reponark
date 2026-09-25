@@ -122,13 +122,13 @@ func (m Model) View() tea.View {
 	return tea.NewView(fmt.Sprint(shared.AppStyle.Width(m.width).Render(m.orgList.View())))
 }
 
-func (m Model) HeaderView() tea.View {
-	title := "Organizations"
-	if m.login != "" {
-		title = fmt.Sprintf("User: %s", m.login)
+// Status says who is signed in. The screen adds nothing to the breadcrumb:
+// it is the root the others open from.
+func (m Model) Status() string {
+	if m.login == "" {
+		return "signing in"
 	}
-
-	return tea.NewView(shared.TitleStyle.Render(title))
+	return "signed in as " + m.login
 }
 
 func (m Model) HelpView() tea.View {
