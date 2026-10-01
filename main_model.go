@@ -17,11 +17,16 @@ import (
 // quitKey exits the application from any screen.
 var quitKey = key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit"))
 
+// helpKey shows or hides every key the current screen handles.
+var helpKey = key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help"))
+
 type MainModel struct {
 	svc    github.Service
 	nav    shared.Navigator
 	width  int
 	height int
+
+	fullHelp bool // the footer lists every key, not just the short line
 }
 
 func NewMainModel(svc github.Service) MainModel {
@@ -62,6 +67,10 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		if key.Matches(msg, quitKey) {
 			return m, tea.Quit
+		}
+		if key.Matches(msg, helpKey) && !m.typing() {
+			m.fullHelp = !m.fullHelp
+			return m, nil
 		}
 		return m, m.UpdateChild(msg)
 
@@ -120,6 +129,7 @@ func (m MainModel) View() tea.View {
 
 // open initialises a new screen and makes it the current one.
 func (m *MainModel) open(screen tea.Model) tea.Cmd {
+	m.fullHelp = false
 	cmd := screen.Init()
 	m.nav.Push(screen)
 	return cmd
@@ -132,6 +142,7 @@ func (m *MainModel) Previous(message shared.PreviousMsg) tea.Cmd {
 		return tea.Quit
 	}
 	_, _ = m.nav.Pop()
+	m.fullHelp = false
 
 	if message.Message != nil {
 		return m.UpdateChild(message.Message)
@@ -213,17 +224,47 @@ func (m MainModel) renderTopEdge(model tea.Model, width int) string {
 	return shared.Fit(edge, width)
 }
 
+// typing reports whether the current screen has a text field focused, in
+// which case "?" is typed rather than toggling help.
+func (m MainModel) typing() bool {
+	child, err := m.nav.Current()
+	if err != nil {
+		return false
+	}
+	t, ok := child.(shared.Typing)
+	return ok && t.Typing()
+}
+
+// renderFooter draws the current screen's keys. The short line gains "? help"
+// just before its last entry, which is how to leave; the full view adds a
+// column of keys that work everywhere.
 func (m MainModel) renderFooter(model tea.Model) string {
 	footerStyle := shared.LayoutFooterStyle
 
-	if hp, ok := model.(shared.HelpProvider); ok {
-		content := viewContent(hp.HelpView())
-		if strings.TrimSpace(content) != "" {
-			return footerStyle.Render(content)
-		}
+	hp, ok := model.(shared.HelpProvider)
+	if !ok {
+		return footerStyle.Foreground(shared.AppColors.BrightBlack).
+			Render("esc: back | ctrl+c: quit")
 	}
-	return footerStyle.Foreground(shared.AppColors.BrightBlack).
-		Render("esc: back | ctrl+c: quit")
+
+	keys := hp.Help()
+	typing := m.typing()
+	if !typing && len(keys.Short) > 0 {
+		last := len(keys.Short) - 1
+		keys.Short = append(append(append([]key.Binding{}, keys.Short[:last]...), helpKey), keys.Short[last])
+	}
+
+	help := shared.NewHelpModel(shared.Max(1, m.width-footerStyle.GetHorizontalFrameSize()))
+	help.ShowAll = m.fullHelp && !typing
+	if help.ShowAll {
+		// The keys that work everywhere join the last column rather than
+		// adding one, so the full view fits the same width as the short line.
+		columns := append([][]key.Binding{}, keys.FullHelp()...)
+		last := len(columns) - 1
+		columns[last] = append(append([]key.Binding{}, columns[last]...), shared.WithHelp(helpKey, "hide help"), quitKey)
+		keys.Full = columns
+	}
+	return footerStyle.Render(help.View(keys))
 }
 
 type layoutParts struct {

@@ -53,7 +53,6 @@ func TestModel_SetDimensions(t *testing.T) {
 
 	assert.Equal(t, 120, m.width)
 	assert.Equal(t, 40, m.height)
-	assert.Equal(t, 120, m.help.Width())
 }
 
 func TestModel_Init(t *testing.T) {
@@ -214,16 +213,6 @@ func TestModel_View_FitsDimensions(t *testing.T) {
 	for _, line := range lines {
 		assert.Equal(t, 40, lipgloss.Width(line), "%q", line)
 	}
-}
-
-func TestModel_HelpView(t *testing.T) {
-	m := NewModel(80, 24)
-
-	content := plain(m.HelpView())
-
-	assert.Contains(t, content, "next tab")
-	assert.Contains(t, content, "prev tab")
-	assert.NotContains(t, content, "quit", "only keys the pane actually handles are advertised")
 }
 
 func TestModel_Keys(t *testing.T) {

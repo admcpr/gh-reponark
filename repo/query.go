@@ -4,16 +4,21 @@ import "time"
 
 type Repository struct {
 	// Overview
-	Id              string `graphql:"id" group:"1⟭ Overview" desc:"The Node ID of the Repository."`
-	DatabaseID      int    `graphql:"databaseId" group:"1⟭ Overview" desc:"Identifies the primary key from the database."`
-	Name            string `graphql:"name" group:"1⟭ Overview" desc:"The name of the repository."`
-	NameWithOwner   string `graphql:"nameWithOwner" group:"1⟭ Overview" desc:"The repository's name with owner (e.g., octocat/hello-world)."`
-	Url             string `graphql:"url" group:"1⟭ Overview" desc:"The HTTP URL for this repository."`
-	ResourcePath    string `graphql:"resourcePath" group:"1⟭ Overview" desc:"The repository's URL path."`
-	Description     string `graphql:"description" group:"1⟭ Overview" desc:"The description of the repository."`
-	DescriptionHTML string `graphql:"descriptionHTML" group:"1⟭ Overview" desc:"The description of the repository rendered to HTML."`
-	HomepageURL     string `graphql:"homepageUrl" group:"1⟭ Overview" desc:"The repository's URL."`
-	PrimaryLanguage struct {
+	Id                       string `graphql:"id" group:"1⟭ Overview" desc:"The Node ID of the Repository."`
+	DatabaseID               int    `graphql:"databaseId" group:"1⟭ Overview" desc:"Identifies the primary key from the database."`
+	Name                     string `graphql:"name" group:"1⟭ Overview" desc:"The name of the repository."`
+	NameWithOwner            string `graphql:"nameWithOwner" group:"1⟭ Overview" desc:"The repository's name with owner (e.g., octocat/hello-world)."`
+	Url                      string `graphql:"url" group:"1⟭ Overview" desc:"The HTTP URL for this repository."`
+	ResourcePath             string `graphql:"resourcePath" group:"1⟭ Overview" desc:"The repository's URL path."`
+	Description              string `graphql:"description" group:"1⟭ Overview" desc:"The description of the repository."`
+	DescriptionHTML          string `graphql:"descriptionHTML" group:"1⟭ Overview" desc:"The description of the repository rendered to HTML."`
+	HomepageURL              string `graphql:"homepageUrl" group:"1⟭ Overview" desc:"The repository's URL."`
+	Visibility               string `graphql:"visibility" group:"1⟭ Overview" desc:"The repository's visibility: PUBLIC, PRIVATE or INTERNAL."`
+	SshURL                   string `graphql:"sshUrl" name:"SSH URL" group:"1⟭ Overview" desc:"The SSH URL to clone this repository."`
+	MirrorURL                string `graphql:"mirrorUrl" group:"1⟭ Overview" desc:"The repository's original mirror URL."`
+	OpenGraphImageURL        string `graphql:"openGraphImageUrl" group:"1⟭ Overview" desc:"The image used to represent this repository in Open Graph data."`
+	UsesCustomOpenGraphImage bool   `graphql:"usesCustomOpenGraphImage" group:"1⟭ Overview" desc:"Whether this repository has a custom Open Graph image rather than one generated from its owner's avatar."`
+	PrimaryLanguage          struct {
 		Name string `name:"Primary Language" group:"1⟭ Overview" desc:"The primary programming language of the repository."`
 		// Color string
 	} `graphql:"primaryLanguage"`
@@ -23,15 +28,18 @@ type Repository struct {
 	} `graphql:"licenseInfo"`
 
 	// Status
-	IsArchived       bool `graphql:"isArchived" group:"2⟭ Status" desc:"Indicates if the repository is archived."`
-	IsDisabled       bool `graphql:"isDisabled" group:"2⟭ Status" desc:"Indicates if the repository is disabled."`
-	IsEmpty          bool `graphql:"isEmpty" group:"2⟭ Status" desc:"Indicates if the repository is empty."`
-	IsFork           bool `graphql:"isFork" group:"2⟭ Status" desc:"Identifies if the repository is a fork."`
-	IsInOrganization bool `graphql:"isInOrganization" group:"2⟭ Status" desc:"Indicates if the repository is part of an organization."`
-	IsLocked         bool `graphql:"isLocked" group:"2⟭ Status" desc:"Indicates if the repository is locked."`
-	IsMirror         bool `graphql:"isMirror" group:"2⟭ Status" desc:"Identifies if the repository is a mirror."`
-	IsPrivate        bool `graphql:"isPrivate" group:"2⟭ Status" desc:"Identifies if the repository is private."`
-	IsTemplate       bool `graphql:"isTemplate" group:"2⟭ Status" desc:"Indicates if the repository is a template repository."`
+	IsArchived                    bool      `graphql:"isArchived" group:"2⟭ Status" desc:"Indicates if the repository is archived."`
+	IsDisabled                    bool      `graphql:"isDisabled" group:"2⟭ Status" desc:"Indicates if the repository is disabled."`
+	IsEmpty                       bool      `graphql:"isEmpty" group:"2⟭ Status" desc:"Indicates if the repository is empty."`
+	IsFork                        bool      `graphql:"isFork" group:"2⟭ Status" desc:"Identifies if the repository is a fork."`
+	IsInOrganization              bool      `graphql:"isInOrganization" group:"2⟭ Status" desc:"Indicates if the repository is part of an organization."`
+	IsLocked                      bool      `graphql:"isLocked" group:"2⟭ Status" desc:"Indicates if the repository is locked."`
+	IsMirror                      bool      `graphql:"isMirror" group:"2⟭ Status" desc:"Identifies if the repository is a mirror."`
+	IsPrivate                     bool      `graphql:"isPrivate" group:"2⟭ Status" desc:"Identifies if the repository is private."`
+	IsTemplate                    bool      `graphql:"isTemplate" group:"2⟭ Status" desc:"Indicates if the repository is a template repository."`
+	IsUserConfigurationRepository bool      `graphql:"isUserConfigurationRepository" group:"2⟭ Status" desc:"Whether this is a user's profile configuration repository."`
+	ArchivedAt                    time.Time `graphql:"archivedAt" group:"2⟭ Status" desc:"When the repository was archived."`
+	LockReason                    string    `graphql:"lockReason" group:"2⟭ Status" desc:"The reason the repository has been locked."`
 
 	// Metrics
 	DiskUsage      int `graphql:"diskUsage" group:"3⟭ Metrics" desc:"The number of kilobytes this repository occupies on disk."`
@@ -52,6 +60,33 @@ type Repository struct {
 	OpenPullRequests struct {
 		TotalCount int `name:"Open Pull Requests" group:"3⟭ Metrics" desc:"The number of open pull requests for this repository."`
 	} `graphql:"pullRequests(states: OPEN)"`
+	Watchers struct {
+		TotalCount int `name:"Watchers" group:"3⟭ Metrics" desc:"The number of users watching the repository."`
+	} `graphql:"watchers"`
+	DirectForks struct {
+		TotalCount int `name:"Direct Forks" group:"3⟭ Metrics" desc:"The number of forks made directly from this repository, not counting forks of forks."`
+	} `graphql:"forks"`
+	Discussions struct {
+		TotalCount int `name:"Discussions" group:"3⟭ Metrics" desc:"The number of discussions opened in the repository."`
+	} `graphql:"discussions"`
+	Labels struct {
+		TotalCount int `name:"Labels" group:"3⟭ Metrics" desc:"The number of labels defined in the repository."`
+	} `graphql:"labels"`
+	Milestones struct {
+		TotalCount int `name:"Milestones" group:"3⟭ Metrics" desc:"The number of milestones in the repository."`
+	} `graphql:"milestones"`
+	Deployments struct {
+		TotalCount int `name:"Deployments" group:"3⟭ Metrics" desc:"The number of deployments of the repository."`
+	} `graphql:"deployments"`
+	Environments struct {
+		TotalCount int `name:"Environments" group:"3⟭ Metrics" desc:"The number of deployment environments in the repository."`
+	} `graphql:"environments"`
+	Packages struct {
+		TotalCount int `name:"Packages" group:"3⟭ Metrics" desc:"The number of packages published from the repository."`
+	} `graphql:"packages"`
+	Submodules struct {
+		TotalCount int `name:"Submodules" group:"3⟭ Metrics" desc:"The number of submodules in the repository's .gitmodules file."`
+	} `graphql:"submodules"`
 
 	// Repository Features
 	HasIssuesEnabled              bool `graphql:"hasIssuesEnabled" group:"4⟭ Features" desc:"Indicates if the repository has issues feature enabled."`
@@ -59,14 +94,24 @@ type Repository struct {
 	HasWikiEnabled                bool `graphql:"hasWikiEnabled" group:"4⟭ Features" desc:"Indicates if the repository has wiki feature enabled."`
 	HasDiscussionsEnabled         bool `graphql:"hasDiscussionsEnabled" group:"4⟭ Features" desc:"Indicates if the repository has discussions feature enabled."`
 	HasVulnerabilityAlertsEnabled bool `graphql:"hasVulnerabilityAlertsEnabled" group:"4⟭ Features" desc:"Indicates if the repository has vulnerability alerts enabled."`
+	HasPullRequestsEnabled        bool `graphql:"hasPullRequestsEnabled" group:"4⟭ Features" desc:"Indicates if the repository has the pull requests feature enabled."`
+	HasSponsorshipsEnabled        bool `graphql:"hasSponsorshipsEnabled" group:"4⟭ Features" desc:"Indicates if the repository displays a Sponsor button for financial contributions."`
+	ForkingAllowed                bool `graphql:"forkingAllowed" group:"4⟭ Features" desc:"Whether this repository allows forks."`
+	IsBlankIssuesEnabled          bool `graphql:"isBlankIssuesEnabled" group:"4⟭ Features" desc:"Whether issues can be opened without using a template."`
 
 	// Merge Settings
-	MergeCommitAllowed  bool `graphql:"mergeCommitAllowed" group:"5⟭ Merge" desc:"Whether merge commits are allowed on this repository."`
-	RebaseMergeAllowed  bool `graphql:"rebaseMergeAllowed" group:"5⟭ Merge" desc:"Whether rebase-merging is allowed on this repository."`
-	SquashMergeAllowed  bool `graphql:"squashMergeAllowed" group:"5⟭ Merge" desc:"Whether squash-merging is allowed on this repository."`
-	AutoMergeAllowed    bool `graphql:"autoMergeAllowed" group:"5⟭ Merge" desc:"Whether auto-merge is allowed on this repository."`
-	DeleteBranchOnMerge bool `graphql:"deleteBranchOnMerge" group:"5⟭ Merge" desc:"Whether to delete head branches when pull requests are merged."`
-	DefaultBranchRef    struct {
+	MergeCommitAllowed       bool   `graphql:"mergeCommitAllowed" group:"5⟭ Merge" desc:"Whether merge commits are allowed on this repository."`
+	RebaseMergeAllowed       bool   `graphql:"rebaseMergeAllowed" group:"5⟭ Merge" desc:"Whether rebase-merging is allowed on this repository."`
+	SquashMergeAllowed       bool   `graphql:"squashMergeAllowed" group:"5⟭ Merge" desc:"Whether squash-merging is allowed on this repository."`
+	AutoMergeAllowed         bool   `graphql:"autoMergeAllowed" group:"5⟭ Merge" desc:"Whether auto-merge is allowed on this repository."`
+	DeleteBranchOnMerge      bool   `graphql:"deleteBranchOnMerge" group:"5⟭ Merge" desc:"Whether to delete head branches when pull requests are merged."`
+	AllowUpdateBranch        bool   `graphql:"allowUpdateBranch" group:"5⟭ Merge" desc:"Whether a pull request branch that is behind its base can always be updated, even when that is not required to merge."`
+	WebCommitSignoffRequired bool   `graphql:"webCommitSignoffRequired" group:"5⟭ Merge" desc:"Whether contributors must sign off on commits made in the web interface."`
+	MergeCommitTitle         string `graphql:"mergeCommitTitle" group:"5⟭ Merge" desc:"How the default title of a merge commit is generated."`
+	MergeCommitMessage       string `graphql:"mergeCommitMessage" group:"5⟭ Merge" desc:"How the default message of a merge commit is generated."`
+	SquashMergeCommitTitle   string `graphql:"squashMergeCommitTitle" group:"5⟭ Merge" desc:"How the default title of a squash merge commit is generated."`
+	SquashMergeCommitMessage string `graphql:"squashMergeCommitMessage" group:"5⟭ Merge" desc:"How the default message of a squash merge commit is generated."`
+	DefaultBranchRef         struct {
 		Name string `name:"Default Branch" group:"5⟭ Merge" desc:"The name of the default branch for this repository."`
 		// BranchProtectionRule BranchProtectionRule `graphql:"branchProtectionRule"`
 	} `graphql:"defaultBranchRef"`
@@ -80,6 +125,12 @@ type Repository struct {
 	VulnerabilityAlerts     struct {
 		TotalCount int `name:"Vulnerability Alerts" group:"6⟭ Security" desc:"The number of vulnerability alerts for this repository."`
 	} `graphql:"vulnerabilityAlerts"`
+	BranchProtectionRuleCount struct {
+		TotalCount int `name:"Branch Protection Rules" group:"6⟭ Security" desc:"The number of branch protection rules for this repository."`
+	} `graphql:"branchProtectionRules"`
+	Rulesets struct {
+		TotalCount int `name:"Rulesets" group:"6⟭ Security" desc:"The number of rulesets for this repository, including ones inherited from the organization."`
+	} `graphql:"rulesets(includeParents: true)"`
 
 	// Permissions and Access
 	ViewerPermission        string `graphql:"viewerPermission" group:"6⟭ Permissions" desc:"The current user's permission level on the repository (READ, WRITE, ADMIN)."`

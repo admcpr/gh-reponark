@@ -9,7 +9,6 @@ import (
 	"gh-reponark/repo"
 	"gh-reponark/shared"
 
-	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
@@ -54,7 +53,6 @@ type Model struct {
 	pending  [][]string
 	inFlight int
 
-	help      help.Model
 	keymap    orgKeyMap
 	repoModel repo.Model
 
@@ -76,7 +74,6 @@ type Model struct {
 }
 
 func NewModel(svc github.Service, orgKey shared.OrgKey, width, height int) *Model {
-	help := shared.NewHelpModel(width)
 	keymap := newOrgKeyMap()
 
 	m := &Model{
@@ -85,7 +82,6 @@ func NewModel(svc github.Service, orgKey shared.OrgKey, width, height int) *Mode
 		isUser:    orgKey.IsUser,
 		width:     width,
 		height:    height,
-		help:      help,
 		keymap:    keymap,
 		repoModel: repo.NewModel(width/2, height),
 		progress:  progress.New(progress.WithoutPercentage()),
@@ -98,7 +94,6 @@ func NewModel(svc github.Service, orgKey shared.OrgKey, width, height int) *Mode
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
-	m.help.SetWidth(width)
 	m.repoModel.SetDimensions(m.inspectorWidth(), height)
 	m.scrollToCursor()
 }
@@ -290,6 +285,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keymap.ToggleView):
 		m.toggleView()
 	case key.Matches(msg, m.keymap.Inspect), listMode && key.Matches(msg, m.keymap.Right):
+		if _, ok := m.selectedRepo(); !ok {
+			// Nothing is loaded or everything is filtered out.
+			return nil
+		}
 		m.mode = listView
 		m.setInspecting(true)
 		m.scrollToCursor()
@@ -397,55 +396,82 @@ func plural(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-func (m Model) HelpView() tea.View {
-	return tea.NewView(m.help.View(m.helpKeys()))
-}
+// Help lists the keys for the current view. The short line names one key per
+// action; the full view adds the alternatives and paging keys.
+func (m Model) Help() shared.Help {
+	if m.progress.Percent() < 1 || len(m.visible) == 0 {
+		// Until there is something to browse, only filtering and leaving work.
+		return shared.Help{Short: []key.Binding{m.keymap.Filters, m.keymap.Back}}
+	}
 
-// helpKeys lists the bindings for the current view in the order they appear
-// in the footer. Pairs of keys that do the same thing in opposite directions
-// share one entry so the footer fits on a line.
-func (m Model) helpKeys() shared.KeyBindings {
 	repoKeys := m.repoModel.Keys()
-	tabs := helpOnly(repoKeys.NextTab, repoKeys.PrevTab, "tab", "group")
-	if m.mode == matrixView {
-		return shared.KeyBindings{
-			helpOnly(m.keymap.Down, m.keymap.Up, "j/k", "repo"),
-			helpOnly(m.keymap.Left, m.keymap.Right, "h/l", "column"),
-			tabs,
-			withHelp(m.keymap.Inspect, "open"),
-			withHelp(m.keymap.ToggleView, "list"),
-			m.keymap.Filters,
-			m.keymap.Back,
+	tabs := shared.Combine("tab", "group", repoKeys.NextTab, repoKeys.PrevTab)
+	filters := m.keymap.Filters
+	paging := []key.Binding{m.keymap.PageUp, m.keymap.PageDown, m.keymap.Top, m.keymap.Bottom}
+	groups := []key.Binding{repoKeys.NextTab, repoKeys.PrevTab}
+
+	switch {
+	case m.mode == matrixView:
+		return shared.Help{
+			Short: []key.Binding{
+				shared.Combine("hjkl", "move", m.keymap.Left, m.keymap.Down, m.keymap.Up, m.keymap.Right),
+				shared.WithHelp(m.keymap.Inspect, "inspect"),
+				tabs,
+				shared.WithHelp(m.keymap.ToggleView, "list"),
+				filters,
+				m.keymap.Back,
+			},
+			Full: [][]key.Binding{
+				append([]key.Binding{
+					shared.WithHelp(m.keymap.Up, "repo up"),
+					shared.WithHelp(m.keymap.Down, "repo down"),
+					shared.WithHelp(m.keymap.Left, "column left"),
+					shared.WithHelp(m.keymap.Right, "column right"),
+				}, paging...),
+				append(groups, shared.WithHelp(m.keymap.Inspect, "inspect repo"), shared.WithHelp(m.keymap.ToggleView, "list view")),
+				{filters, m.keymap.Back},
+			},
+		}
+
+	case m.inspecting:
+		return shared.Help{
+			Short: []key.Binding{
+				shared.Combine("j/k", "property", m.keymap.Down, m.keymap.Up),
+				tabs,
+				shared.WithHelp(m.keymap.ToggleView, "matrix"),
+				filters,
+				shared.Combine("h/esc", "repos", m.keymap.Left, m.keymap.Back),
+			},
+			Full: [][]key.Binding{
+				append([]key.Binding{
+					shared.WithHelp(m.keymap.Up, "property up"),
+					shared.WithHelp(m.keymap.Down, "property down"),
+				}, paging...),
+				append(groups, shared.Combine("h/esc", "back to repos", m.keymap.Left, m.keymap.Back), shared.WithHelp(m.keymap.ToggleView, "matrix view")),
+				{filters},
+			},
+		}
+
+	default:
+		return shared.Help{
+			Short: []key.Binding{
+				shared.Combine("j/k", "repo", m.keymap.Down, m.keymap.Up),
+				shared.Combine("enter", "inspect", m.keymap.Inspect, m.keymap.Right),
+				tabs,
+				shared.WithHelp(m.keymap.ToggleView, "matrix"),
+				filters,
+				m.keymap.Back,
+			},
+			Full: [][]key.Binding{
+				append([]key.Binding{
+					shared.WithHelp(m.keymap.Up, "repo up"),
+					shared.WithHelp(m.keymap.Down, "repo down"),
+				}, paging...),
+				append(groups, shared.Combine("l/enter", "inspect repo", m.keymap.Right, m.keymap.Inspect), shared.WithHelp(m.keymap.ToggleView, "matrix view")),
+				{filters, m.keymap.Back},
+			},
 		}
 	}
-	if m.inspecting {
-		return shared.KeyBindings{
-			helpOnly(m.keymap.Down, m.keymap.Up, "j/k", "property"),
-			helpOnly(m.keymap.Left, m.keymap.Back, "h/esc", "repos"),
-			tabs,
-			withHelp(m.keymap.ToggleView, "matrix"),
-			m.keymap.Filters,
-		}
-	}
-	return shared.KeyBindings{
-		helpOnly(m.keymap.Down, m.keymap.Up, "j/k", "repo"),
-		helpOnly(m.keymap.Right, m.keymap.Inspect, "l/enter", "inspect"),
-		tabs,
-		withHelp(m.keymap.ToggleView, "matrix"),
-		m.keymap.Filters,
-		m.keymap.Back,
-	}
-}
-
-// helpOnly combines two bindings into one footer entry.
-func helpOnly(a, b key.Binding, keys, desc string) key.Binding {
-	return key.NewBinding(key.WithKeys(append(a.Keys(), b.Keys()...)...), key.WithHelp(keys, desc))
-}
-
-// withHelp returns a copy of binding with a different description.
-func withHelp(binding key.Binding, desc string) key.Binding {
-	binding.SetHelp(binding.Help().Key, desc)
-	return binding
 }
 
 func (m *Model) ProgressView() tea.View {
@@ -491,11 +517,11 @@ func newOrgKeyMap() orgKeyMap {
 		),
 		Top: key.NewBinding(
 			key.WithKeys("home", "g"),
-			key.WithHelp("g", "first"),
+			key.WithHelp("g/home", "first"),
 		),
 		Bottom: key.NewBinding(
 			key.WithKeys("end", "G"),
-			key.WithHelp("G", "last"),
+			key.WithHelp("G/end", "last"),
 		),
 		Left: key.NewBinding(
 			key.WithKeys("left", "h"),

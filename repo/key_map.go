@@ -26,11 +26,11 @@ func NewRepoKeyMap() KeyMap {
 	return KeyMap{
 		NextTab: key.NewBinding(
 			key.WithKeys("tab"),
-			key.WithHelp("tab", "next tab"),
+			key.WithHelp("tab", "next group"),
 		),
 		PrevTab: key.NewBinding(
 			key.WithKeys("shift+tab"),
-			key.WithHelp("shift+tab", "prev tab"),
+			key.WithHelp("shift+tab", "previous group"),
 		),
 	}
 }

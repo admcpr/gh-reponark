@@ -168,6 +168,9 @@ func (m *Model) matrixRow(c repo.RepoConfig, selected bool, shown []matrixColumn
 		}
 		row += cell
 	}
+	if selected {
+		return shared.HighlightRow(row, m.width, true)
+	}
 	return row
 }
 

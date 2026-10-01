@@ -3,7 +3,6 @@ package shared
 import (
 	"fmt"
 
-	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -12,7 +11,6 @@ import (
 // ErrorModel is a screen that shows an error and lets the user go back.
 type ErrorModel struct {
 	err    error
-	help   help.Model
 	keymap errorKeyMap
 	width  int
 	height int
@@ -21,7 +19,6 @@ type ErrorModel struct {
 func NewErrorModel(err error, width, height int) *ErrorModel {
 	return &ErrorModel{
 		err:    err,
-		help:   NewHelpModel(width),
 		keymap: newErrorKeyMap(),
 		width:  width,
 		height: height,
@@ -35,7 +32,6 @@ func (m *ErrorModel) Err() error {
 func (m *ErrorModel) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
-	m.help.SetWidth(width)
 }
 
 func (m *ErrorModel) Init() tea.Cmd {
@@ -65,8 +61,8 @@ func (m *ErrorModel) Breadcrumb() string {
 	return "Error"
 }
 
-func (m *ErrorModel) HelpView() tea.View {
-	return tea.NewView(m.help.View(m.keymap))
+func (m *ErrorModel) Help() Help {
+	return Help{Short: m.keymap.ShortHelp()}
 }
 
 type errorKeyMap struct {

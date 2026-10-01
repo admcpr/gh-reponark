@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
@@ -41,4 +42,23 @@ func TestScrollOffset(t *testing.T) {
 			assert.Equal(t, tt.want, ScrollOffset(tt.offset, tt.cursor, tt.rows, tt.total))
 		})
 	}
+}
+
+func TestHighlightRow(t *testing.T) {
+	row := GoodStyle.Render("ok") + " plain"
+
+	focused := HighlightRow(row, 12, true)
+	unfocused := HighlightRow(row, 12, false)
+
+	assert.Equal(t, "ok plain    ", ansi.Strip(focused), "the row is padded to the full width")
+	assert.NotEqual(t, focused, unfocused, "focus changes the tint")
+
+	set := backgroundSequence(AppColors.Selection)
+	assert.True(t, strings.HasPrefix(focused, set))
+	assert.Equal(t, strings.Count(focused, resetSequence), strings.Count(focused, set),
+		"every reset inside the row is followed by the background again, except the last")
+}
+
+func TestBackgroundSequence(t *testing.T) {
+	assert.Equal(t, "\x1b[48;2;18;42;51m", backgroundSequence(AppColors.Selection))
 }

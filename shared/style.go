@@ -32,6 +32,10 @@ type colors struct {
 	Dim color.Color
 	// Surface lifts small elements such as chips off the background.
 	Surface color.Color
+	// Selection tints the selected row in the focused pane; SelectionDim
+	// marks it more faintly when another pane has focus.
+	Selection    color.Color
+	SelectionDim color.Color
 }
 
 func NewColors(darkmode bool) colors {
@@ -57,6 +61,8 @@ func NewColors(darkmode bool) colors {
 		Foreground:   lipgloss.Color("#f1f1f1"),
 		Dim:          lipgloss.Color("#6c6868"),
 		Surface:      lipgloss.Color("#16323b"),
+		Selection:    lipgloss.Color("#122a33"),
+		SelectionDim: lipgloss.Color("#1c1816"),
 	}
 	if darkmode {
 		colors.name = "3024 Night"
@@ -117,17 +123,22 @@ func PillStyle(c color.Color) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(AppColors.Background).Background(c).Bold(true)
 }
 
+// NewHelpModel builds the footer's help: keys in the accent colour so they
+// stand out from what they do, and two spaces between entries so the short
+// line fits an 80-column terminal.
 func NewHelpModel(width int) help.Model {
 	m := help.New()
 	styles := help.DefaultStyles(true)
-	styles.ShortKey = lipgloss.NewStyle().Foreground(AppColors.Foreground)
-	styles.ShortDesc = lipgloss.NewStyle().Foreground(AppColors.Foreground)
-	styles.ShortSeparator = lipgloss.NewStyle().Foreground(AppColors.BrightBlack)
-	styles.FullKey = lipgloss.NewStyle().Foreground(AppColors.Foreground)
-	styles.FullDesc = lipgloss.NewStyle().Foreground(AppColors.Foreground)
-	styles.FullSeparator = lipgloss.NewStyle().Foreground(AppColors.BrightBlack)
-	styles.Ellipsis = lipgloss.NewStyle().Foreground(AppColors.BrightBlack)
+	styles.ShortKey = AccentStyle
+	styles.ShortDesc = TextBodyStyle
+	styles.ShortSeparator = DimStyle
+	styles.FullKey = AccentStyle
+	styles.FullDesc = TextBodyStyle
+	styles.FullSeparator = DimStyle
+	styles.Ellipsis = DimStyle
 	m.Styles = styles
+	m.ShortSeparator = "  "
+	m.FullSeparator = "    "
 	if width > 0 {
 		m.SetWidth(width)
 	}

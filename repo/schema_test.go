@@ -9,7 +9,7 @@ import (
 func TestSchema(t *testing.T) {
 	schema := Schema()
 
-	assert.Len(t, schema, 49)
+	assert.Len(t, schema, 78)
 	assert.Equal(t, "Id", schema[0].Name, "declaration order should be preserved")
 	assert.Equal(t, "Viewer Has Starred", schema[len(schema)-1].Name)
 
@@ -62,5 +62,5 @@ func TestRepositoryProperties_Order(t *testing.T) {
 	}
 
 	assert.Equal(t, []string{"Id", "Database ID", "Name", "Name With Owner"}, names)
-	assert.Len(t, properties, 49)
+	assert.Len(t, properties, 78)
 }

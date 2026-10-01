@@ -98,6 +98,9 @@ func (m *Model) listRow(c repo.RepoConfig, selected bool, nameWidth int, languag
 	if pushed {
 		row += shared.FitRight(repo.FormatCell(c.Properties["Pushed At"]), pushedWidth)
 	}
+	if selected {
+		return shared.HighlightRow(row, m.listWidth(), !m.inspecting)
+	}
 	return row
 }
 

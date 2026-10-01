@@ -91,7 +91,6 @@ func TestModel_SetDimensions(t *testing.T) {
 
 	assert.Equal(t, 120, m.width)
 	assert.Equal(t, 50, m.height)
-	assert.Equal(t, 120, m.help.Width())
 }
 
 func TestModel_Search(t *testing.T) {
@@ -373,25 +372,46 @@ func TestModel_Status_WithoutRepos(t *testing.T) {
 	assert.Equal(t, "1 active", m.Status())
 }
 
-func TestModel_HelpView(t *testing.T) {
+func TestModel_Help(t *testing.T) {
 	m := newTestModel()
-	content := plain(m.HelpView())
-	assert.Contains(t, content, "enter edit")
-	assert.Contains(t, content, "/ search")
-	assert.Contains(t, content, "x clear")
-	assert.Contains(t, content, "esc done")
-	assert.NotContains(t, content, "space", "space only toggles yes/no properties")
+	assert.Equal(t, "j/k property  l/enter edit  / search  x clear  esc done", m.Help().String())
+	assert.False(t, m.Typing())
 
 	selectProperty(m, "is archived")
-	assert.Contains(t, plain(m.HelpView()), "space any/yes/no")
+	assert.Equal(t, "j/k property  l/enter edit  space toggle  / search  x clear  esc done", m.Help().String(),
+		"space only toggles yes/no properties")
 
 	press(m, "enter")
-	content = plain(m.HelpView())
-	assert.Contains(t, content, "←/→ choose")
-	assert.Contains(t, content, "esc cancel")
+	assert.Equal(t, "←/→ choose  y yes  n no  a any  enter done  esc cancel", m.Help().String())
+	assert.False(t, m.Typing(), "the yes/no editor takes single keys")
+	assert.Len(t, m.Help().FullHelp(), 2)
 
 	press(m, "esc", "/")
-	assert.Contains(t, plain(m.HelpView()), "esc clear")
+	assert.Equal(t, "type to search  ↓/enter done  esc clear", m.Help().String())
+	assert.True(t, m.Typing())
+
+	press(m, "esc", "/", "stargazer", "enter", "enter")
+	assert.Equal(t, "tab/↑/↓ other field  enter done  esc cancel", m.Help().String())
+	assert.True(t, m.Typing(), "number fields take text")
+}
+
+func TestModel_SearchTypesEveryLetter(t *testing.T) {
+	m := newTestModel()
+
+	press(m, "/", "proj")
+
+	assert.True(t, m.searching, "j is typed, not taken as a move")
+	assert.Equal(t, "proj", m.search.Value())
+	press(m, "?")
+	assert.Equal(t, "proj?", m.search.Value())
+}
+
+func TestModel_BackspaceDoesNotClear(t *testing.T) {
+	m := NewModel(FilterMap{"Id": NewStringFilter("Id", "x")}, nil, 100, 30)
+
+	press(m, "backspace")
+
+	assert.Contains(t, m.filters, "Id", "only x clears a filter")
 }
 
 func TestParseDate(t *testing.T) {

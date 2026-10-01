@@ -5,7 +5,6 @@ import (
 
 	"gh-reponark/shared"
 
-	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -23,7 +22,6 @@ type Model struct {
 	focused        bool
 	width          int
 	height         int
-	help           help.Model
 	keymap         KeyMap
 }
 
@@ -32,7 +30,6 @@ func NewModel(width, height int) Model {
 		repository: RepoConfig{Properties: map[string]RepoProperty{}, PropertyGroups: map[string][]RepoProperty{}},
 		width:      width,
 		height:     height,
-		help:       shared.NewHelpModel(width),
 		keymap:     NewRepoKeyMap(),
 	}
 }
@@ -40,7 +37,6 @@ func NewModel(width, height int) Model {
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
-	m.help.SetWidth(width)
 	m.SelectProperty(m.activeProperty)
 }
 
@@ -178,9 +174,9 @@ func (m Model) propertyRow(p PropertySchema, active bool, nameWidth, width int) 
 		marker = shared.DimStyle.Render("▸ ")
 	}
 	value := FormatValue(m.repository.Properties[p.Name])
-	return shared.Fit(marker+name+"  "+value, width)
-}
-
-func (m Model) HelpView() tea.View {
-	return tea.NewView(m.help.View(m.keymap))
+	row := marker + name + "  " + value
+	if active {
+		return shared.HighlightRow(row, width, m.focused)
+	}
+	return shared.Fit(row, width)
 }

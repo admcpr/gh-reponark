@@ -74,8 +74,8 @@ type boolEditorKeyMap struct {
 
 func newBoolEditor(name string, current Filter) *boolEditor {
 	e := &boolEditor{name: name, keymap: boolEditorKeyMap{
-		Prev: key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/→", "choose")),
-		Next: key.NewBinding(key.WithKeys("right", "l", "space")),
+		Prev: key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "previous")),
+		Next: key.NewBinding(key.WithKeys("right", "l", "space"), key.WithHelp("→/l/space", "next")),
 		Any:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "any")),
 		Yes:  key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yes")),
 		No:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "no")),
@@ -138,7 +138,12 @@ func (e *boolEditor) View(focused bool, width int) []string {
 }
 
 func (e *boolEditor) Keys() []key.Binding {
-	return []key.Binding{e.keymap.Prev, e.keymap.Yes, e.keymap.No, e.keymap.Any}
+	return []key.Binding{shared.Combine("←/→", "choose", e.keymap.Prev, e.keymap.Next), e.keymap.Yes, e.keymap.No, e.keymap.Any}
+}
+
+// FullKeys lists every key the editor handles, for the full help.
+func (e *boolEditor) FullKeys() []key.Binding {
+	return []key.Binding{e.keymap.Prev, e.keymap.Next, e.keymap.Yes, e.keymap.No, e.keymap.Any}
 }
 
 // ---- ranges of numbers and dates
@@ -156,7 +161,7 @@ func newRangeEditor(labels, placeholders, values [2]string, build func(lower, up
 	e := &rangeEditor{
 		labels: labels,
 		build:  build,
-		next:   key.NewBinding(key.WithKeys("tab", "shift+tab", "up", "down"), key.WithHelp("tab", "next field")),
+		next:   key.NewBinding(key.WithKeys("tab", "shift+tab", "up", "down"), key.WithHelp("tab/↑/↓", "other field")),
 	}
 	for i := range e.inputs {
 		e.inputs[i] = newInput(placeholders[i], values[i])

@@ -51,7 +51,6 @@ func TestNewModel(t *testing.T) {
 	assert.Equal(t, 24, m.height)
 	assert.Equal(t, "", m.login)
 	assert.Empty(t, m.orgList.Items())
-	assert.Equal(t, 80, m.help.Width())
 }
 
 func TestModel_SetDimensions(t *testing.T) {
@@ -61,7 +60,6 @@ func TestModel_SetDimensions(t *testing.T) {
 
 	assert.Equal(t, 120, m.width)
 	assert.Equal(t, 40, m.height)
-	assert.Equal(t, 120, m.help.Width())
 }
 
 func TestModel_Init_LoadsUser(t *testing.T) {
@@ -201,13 +199,24 @@ func TestModel_Status(t *testing.T) {
 	assert.Equal(t, "signed in as octocat", m.Status())
 }
 
-func TestModel_HelpView(t *testing.T) {
+func TestModel_Help(t *testing.T) {
 	m := newTestModel()
 
-	content := plain(m.HelpView())
+	help := m.Help()
 
-	assert.Contains(t, content, "select")
-	assert.Contains(t, content, "quit")
+	assert.Equal(t, "j/k org  enter open  esc quit", help.String())
+	assert.Len(t, help.FullHelp(), 2, "the full view adds the list's paging keys")
+}
+
+func TestModel_ListFilterIsOff(t *testing.T) {
+	m := newTestModel()
+	m.SetUser(newTestUser("octocat", "acme"))
+
+	m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+
+	assert.NotContains(t, plain(m.View()), "Filter:", "the list's own filter prompt cannot be finished, so it stays off")
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	assert.Nil(t, cmd, "q does not quit; esc and ctrl+c do")
 }
 
 func TestModel_Update_EscGoesBack(t *testing.T) {
@@ -244,11 +253,4 @@ func TestUserKeyMap(t *testing.T) {
 	assert.Equal(t, []string{"down", "j"}, keymap.Down.Keys())
 	assert.Equal(t, []string{"enter"}, keymap.Select.Keys())
 	assert.Equal(t, []string{"esc"}, keymap.Back.Keys())
-
-	short := keymap.ShortHelp()
-	assert.Len(t, short, 4)
-
-	full := keymap.FullHelp()
-	assert.Len(t, full, 1)
-	assert.Equal(t, short, full[0])
 }

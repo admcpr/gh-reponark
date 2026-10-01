@@ -10,7 +10,6 @@ import (
 	"gh-reponark/repo"
 	"gh-reponark/shared"
 
-	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -48,7 +47,6 @@ type Model struct {
 	before  Filter // the filter when editing began, restored on cancel
 
 	keymap filterKeyMap
-	help   help.Model
 	width  int
 	height int
 }
@@ -84,7 +82,6 @@ func NewModel(current FilterMap, repos []repo.RepoConfig, width, height int) *Mo
 		properties: properties,
 		search:     search,
 		keymap:     newFilterKeyMap(),
-		help:       shared.NewHelpModel(width),
 		width:      width,
 		height:     height,
 	}
@@ -95,7 +92,6 @@ func NewModel(current FilterMap, repos []repo.RepoConfig, width, height int) *Mo
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
-	m.help.SetWidth(width)
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -186,7 +182,7 @@ func (m *Model) updateSearch(msg tea.Msg) tea.Cmd {
 		case key.Matches(msg, m.keymap.Cancel):
 			m.search.SetValue("")
 			fallthrough
-		case key.Matches(msg, m.keymap.Done, m.keymap.Down):
+		case key.Matches(msg, m.keymap.EndSearch):
 			m.searching = false
 			m.search.Blur()
 			m.refreshMatches()
@@ -391,7 +387,11 @@ func (m *Model) propertyRow(p repo.PropertySchema, highlighted bool, width int) 
 		}
 	}
 	nameWidth := width - 4 - lipgloss.Width(condition) - 1
-	return marker + typeOf(p.Type).Glyph() + " " + name.Render(shared.Fit(p.Name, nameWidth)) + " " + shared.AccentStyle.Render(condition)
+	row := marker + typeOf(p.Type).Glyph() + " " + name.Render(shared.Fit(p.Name, nameWidth)) + " " + shared.AccentStyle.Render(condition)
+	if highlighted {
+		return shared.HighlightRow(row, width, !m.searching && !m.editing)
+	}
+	return row
 }
 
 // chips shows each active filter as a chip, with a count of any that do not
@@ -609,35 +609,56 @@ func (m Model) Status() string {
 	return fmt.Sprintf("%d of %d repos match", len(m.filters.FilterRepos(m.repos)), len(m.repos))
 }
 
-func (m Model) HelpView() tea.View {
-	return tea.NewView(m.help.View(m.helpKeys()))
+// Typing reports whether a text field has focus: the search, or a number,
+// date or text editor. The yes/no editor takes single keys, not text.
+func (m Model) Typing() bool {
+	if m.searching {
+		return true
+	}
+	_, choosing := m.editor.(*boolEditor)
+	return m.editing && !choosing
 }
 
-// helpKeys lists the bindings for whatever has focus.
-func (m Model) helpKeys() shared.KeyBindings {
+// Help lists the keys for whatever has focus.
+func (m Model) Help() shared.Help {
+	finish := []key.Binding{m.keymap.Done, m.keymap.Cancel}
 	switch {
 	case m.searching:
-		return shared.KeyBindings{
-			key.NewBinding(key.WithHelp("type", "to search")),
-			m.keymap.Done,
-			withHelp(m.keymap.Cancel, "clear"),
-		}
+		return shared.Help{Short: []key.Binding{
+			shared.Hint("type", "to search"),
+			m.keymap.EndSearch,
+			shared.WithHelp(m.keymap.Cancel, "clear"),
+		}}
 	case m.editing:
-		keys := shared.KeyBindings(m.editor.Keys())
-		return append(keys, m.keymap.Done, m.keymap.Cancel)
+		keys := append(m.editor.Keys(), finish...)
+		var full [][]key.Binding
+		if e, ok := m.editor.(*boolEditor); ok {
+			full = [][]key.Binding{e.FullKeys(), finish}
+		}
+		return shared.Help{Short: keys, Full: full}
 	}
-	keys := shared.KeyBindings{
-		key.NewBinding(key.WithKeys("j", "k"), key.WithHelp("j/k", "move")),
+
+	short := []key.Binding{
+		shared.Combine("j/k", "property", m.keymap.Down, m.keymap.Up),
 		m.keymap.Edit,
 	}
 	if _, ok := m.editor.(*boolEditor); ok {
-		keys = append(keys, m.keymap.Toggle)
+		short = append(short, shared.WithHelp(m.keymap.Toggle, "toggle"))
 	}
-	return append(keys, m.keymap.Search, m.keymap.Clear, m.keymap.ClearAll, m.keymap.Back)
-}
+	short = append(short, m.keymap.Search, m.keymap.Clear, m.keymap.Back)
 
-// withHelp returns a copy of binding with a different description.
-func withHelp(binding key.Binding, desc string) key.Binding {
-	binding.SetHelp(binding.Help().Key, desc)
-	return binding
+	return shared.Help{
+		Short: short,
+		Full: [][]key.Binding{
+			{
+				shared.WithHelp(m.keymap.Up, "property up"),
+				shared.WithHelp(m.keymap.Down, "property down"),
+				m.keymap.Top,
+				m.keymap.Bottom,
+				m.keymap.Search,
+			},
+			{m.keymap.Edit, m.keymap.Toggle, m.keymap.Clear, m.keymap.ClearAll},
+			{m.keymap.Back},
+		},
+	}
 }

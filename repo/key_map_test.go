@@ -12,9 +12,9 @@ func TestNewRepoKeyMap(t *testing.T) {
 	k := NewRepoKeyMap()
 
 	assert.Equal(t, []string{"tab"}, k.NextTab.Keys())
-	assert.Equal(t, "next tab", k.NextTab.Help().Desc)
+	assert.Equal(t, "next group", k.NextTab.Help().Desc)
 	assert.Equal(t, []string{"shift+tab"}, k.PrevTab.Keys())
-	assert.Equal(t, "prev tab", k.PrevTab.Help().Desc)
+	assert.Equal(t, "previous group", k.PrevTab.Help().Desc)
 }
 
 func TestKeyMap_MatchesKeys(t *testing.T) {

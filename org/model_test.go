@@ -156,7 +156,6 @@ func TestModel_SetDimensions(t *testing.T) {
 
 	assert.Equal(t, 120, m.width)
 	assert.Equal(t, 40, m.height)
-	assert.Equal(t, 120, m.help.Width())
 }
 
 func TestModel_Init_LoadsFirstPage(t *testing.T) {
@@ -758,7 +757,7 @@ func TestModel_View_MatrixScrollsColumns(t *testing.T) {
 
 	m.repoModel.SelectProperty(len(m.repoModel.ActiveGroup().Properties) - 1)
 	content := plain(m.View())
-	assert.Contains(t, content, "Template", "the focused column is scrolled into view")
+	assert.Contains(t, content, "Reason", "the focused column (Lock Reason) is scrolled into view")
 	assert.Contains(t, content, "‹", "hidden columns to the left are marked")
 }
 
@@ -800,41 +799,54 @@ func TestModel_FilterKeySendsRepos(t *testing.T) {
 	assert.Len(t, open.Repos, 1, "the filter screen counts matches against the loaded repos")
 }
 
-func TestModel_HelpView(t *testing.T) {
-	m := newOrgModel()
+func TestModel_Help(t *testing.T) {
+	m := newLoadedModel(repo.Repository{Name: "alpha"})
 
-	content := plain(m.HelpView())
-	assert.Contains(t, content, "j/k repo")
-	assert.Contains(t, content, "l/enter inspect")
-	assert.Contains(t, content, "group")
-	assert.Contains(t, content, "v matrix")
-	assert.Contains(t, content, "filters")
-	assert.Contains(t, content, "back")
+	assert.Equal(t, "j/k repo  enter inspect  tab group  v matrix  f filters  esc back", m.Help().String())
 
 	m.setInspecting(true)
-	content = plain(m.HelpView())
-	assert.Contains(t, content, "j/k property")
-	assert.Contains(t, content, "h/esc repos")
+	assert.Equal(t, "j/k property  tab group  v matrix  f filters  h/esc repos", m.Help().String(),
+		"the way back out of the inspector comes last")
 	m.setInspecting(false)
 
 	m.mode = matrixView
-	content = plain(m.HelpView())
-	assert.Contains(t, content, "column")
-	assert.Contains(t, content, "enter open")
-	assert.Contains(t, content, "v list")
-	assert.Contains(t, content, "esc back", "the matrix footer fits in 80 columns")
+	assert.Equal(t, "hjkl move  enter inspect  tab group  v list  f filters  esc back", m.Help().String())
 }
 
-func TestModel_HelpKeys_IncludeDetailPaneBindings(t *testing.T) {
-	m := newOrgModel()
-	repoKeys := m.repoModel.Keys()
+func TestModel_Help_NothingToBrowse(t *testing.T) {
+	loading := newOrgModel()
+	assert.Equal(t, "f filters  esc back", loading.Help().String())
 
-	keys := m.helpKeys()
+	m := newLoadedModel(repo.Repository{Name: "alpha"})
+	m.Update(filters.FiltersMsg(filters.FilterMap{"Is Archived": filters.NewBoolFilter("Is Archived", true)}))
+	assert.Equal(t, "f filters  esc back", m.Help().String(), "everything is filtered out")
+}
 
-	assert.Len(t, keys, 6)
-	assert.Equal(t, append(m.keymap.Right.Keys(), m.keymap.Inspect.Keys()...), keys[1].Keys())
-	assert.Equal(t, append(repoKeys.NextTab.Keys(), repoKeys.PrevTab.Keys()...), keys[2].Keys())
-	assert.Equal(t, m.keymap.Filters.Keys(), keys[4].Keys())
+func TestModel_Help_FullListsEveryKey(t *testing.T) {
+	m := newLoadedModel(repo.Repository{Name: "alpha"})
+
+	for _, mode := range []viewMode{listView, matrixView} {
+		m.mode = mode
+		var keys []string
+		for _, column := range m.Help().FullHelp() {
+			for _, b := range column {
+				keys = append(keys, b.Keys()...)
+			}
+		}
+		for _, want := range []string{"pgup", "pgdown", "g", "G", "tab", "shift+tab", "v", "f", "esc"} {
+			assert.Contains(t, keys, want, "mode %d", mode)
+		}
+	}
+}
+
+func TestModel_InspectNeedsARepo(t *testing.T) {
+	m := newLoadedModel(repo.Repository{Name: "alpha"})
+	m.Update(filters.FiltersMsg(filters.FilterMap{"Is Archived": filters.NewBoolFilter("Is Archived", true)}))
+
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
+
+	assert.False(t, m.inspecting, "there is no repo to inspect")
 }
 
 func TestModel_ListUsesKeyMapBindings(t *testing.T) {

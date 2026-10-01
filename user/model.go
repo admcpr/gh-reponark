@@ -7,7 +7,6 @@ import (
 	"gh-reponark/github"
 	"gh-reponark/shared"
 
-	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
@@ -22,7 +21,6 @@ type Model struct {
 	orgList list.Model
 	width   int
 	height  int
-	help    help.Model
 	keymap  userKeyMap
 }
 
@@ -38,16 +36,20 @@ func NewModel(svc github.Service, width, height int) *Model {
 	// The list moves with the same bindings the help footer advertises.
 	list.KeyMap.CursorUp = keymap.Up
 	list.KeyMap.CursorDown = keymap.Down
+	// The screen handles enter and esc itself, so the list's own filter
+	// prompt could not be confirmed or cancelled, and its quit and help keys
+	// would compete with the app's. Switch them all off.
+	list.SetFilteringEnabled(false)
+	for _, binding := range []*key.Binding{&list.KeyMap.Filter, &list.KeyMap.Quit, &list.KeyMap.ForceQuit, &list.KeyMap.ShowFullHelp, &list.KeyMap.CloseFullHelp} {
+		binding.SetEnabled(false)
+	}
 
-	helpModel := shared.NewHelpModel(width)
-
-	return &Model{svc: svc, orgList: list, width: width, height: height, help: helpModel, keymap: keymap}
+	return &Model{svc: svc, orgList: list, width: width, height: height, keymap: keymap}
 }
 
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
-	m.help.SetWidth(width)
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -131,9 +133,21 @@ func (m Model) Status() string {
 	return "signed in as " + m.login
 }
 
-func (m Model) HelpView() tea.View {
-	// Even if width is zero, help will render minimally; SetDimensions sets width on resize.
-	return tea.NewView(m.help.View(m.keymap))
+// Help lists the picker's keys, including the paging keys the list handles.
+func (m Model) Help() shared.Help {
+	pages := shared.Combine("←/→", "page", m.orgList.KeyMap.PrevPage, m.orgList.KeyMap.NextPage)
+	ends := shared.Combine("g/G", "first/last", m.orgList.KeyMap.GoToStart, m.orgList.KeyMap.GoToEnd)
+	return shared.Help{
+		Short: []key.Binding{
+			shared.Combine("j/k", "org", m.keymap.Down, m.keymap.Up),
+			m.keymap.Select,
+			m.keymap.Back,
+		},
+		Full: [][]key.Binding{
+			{m.keymap.Up, m.keymap.Down, pages, ends},
+			{m.keymap.Select, m.keymap.Back},
+		},
+	}
 }
 
 // userKeyMap holds the bindings for the organization picker. Update matches
@@ -157,19 +171,11 @@ func newUserKeyMap() userKeyMap {
 		),
 		Select: key.NewBinding(
 			key.WithKeys("enter"),
-			key.WithHelp("enter", "select"),
+			key.WithHelp("enter", "open"),
 		),
 		Back: key.NewBinding(
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "quit"),
 		),
 	}
-}
-
-func (k userKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Select, k.Back}
-}
-
-func (k userKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{k.ShortHelp()}
 }

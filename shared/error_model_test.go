@@ -17,7 +17,6 @@ func TestNewErrorModel(t *testing.T) {
 	assert.Equal(t, err, m.Err())
 	assert.Equal(t, 80, m.width)
 	assert.Equal(t, 24, m.height)
-	assert.Equal(t, 80, m.help.Width())
 }
 
 func TestErrorModel_SetDimensions(t *testing.T) {
@@ -27,7 +26,6 @@ func TestErrorModel_SetDimensions(t *testing.T) {
 
 	assert.Equal(t, 120, m.width)
 	assert.Equal(t, 40, m.height)
-	assert.Equal(t, 120, m.help.Width())
 }
 
 func TestErrorModel_Init(t *testing.T) {
@@ -96,7 +94,7 @@ func TestErrorModel_HeaderAndHelpViews(t *testing.T) {
 	m := NewErrorModel(errors.New("boom"), 80, 24)
 
 	assert.Equal(t, "Error", m.Breadcrumb())
-	assert.Contains(t, ansi.Strip(fmt.Sprint(m.HelpView().Content)), "back")
+	assert.Equal(t, "esc back", m.Help().String())
 }
 
 func TestErrorKeyMap(t *testing.T) {

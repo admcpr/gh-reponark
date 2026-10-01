@@ -298,7 +298,7 @@ func TestMainModel_View(t *testing.T) {
 	assert.NotEmpty(t, content)
 	assert.Contains(t, content, "┌─ reponark ", "the breadcrumb is drawn into the top edge")
 	assert.Contains(t, content, "signing in", "the current screen's status is on the top edge")
-	assert.Contains(t, content, "select", "the user model help should be rendered in the footer")
+	assert.Contains(t, content, "enter open", "the user model help should be rendered in the footer")
 	assert.Equal(t, 24, lipgloss.Height(content), "the view fills the terminal height")
 }
 
@@ -356,7 +356,7 @@ func TestRenderFooter(t *testing.T) {
 		model tea.Model
 		want  string
 	}{
-		{name: "help provider", model: user.NewModel(&githubtest.Fake{}, 0, 0), want: "select"},
+		{name: "help provider", model: user.NewModel(&githubtest.Fake{}, 0, 0), want: "enter open  ? help  esc quit"},
 		{name: "org model", model: org.NewModel(&githubtest.Fake{}, shared.OrgKey{Name: "demo"}, 80, 24), want: "filters"},
 		{name: "default help", model: &plainModel{}, want: "esc: back | ctrl+c: quit"},
 	}
@@ -367,6 +367,64 @@ func TestRenderFooter(t *testing.T) {
 			assert.NotEmpty(t, strings.TrimSpace(footer))
 			assert.Contains(t, ansi.Strip(footer), tt.want)
 		})
+	}
+}
+
+func TestMainModel_QuestionMarkTogglesFullHelp(t *testing.T) {
+	m := newTestMainModel()
+	m.SetDimensions(80, 24)
+	short := plain(m.View())
+	assert.Contains(t, short, "? help")
+
+	m, cmd := update(m, keyPress("?"))
+	assert.Nil(t, cmd)
+	assert.True(t, m.fullHelp)
+	full := plain(m.View())
+	assert.Contains(t, full, "hide help")
+	assert.Contains(t, full, "ctrl+c quit", "the full view lists keys that work everywhere")
+	assert.Contains(t, full, "first/last", "and the screen's extra keys")
+	assert.Equal(t, 24, lipgloss.Height(full), "the body shrinks to make room")
+
+	m, _ = update(m, keyPress("?"))
+	assert.False(t, m.fullHelp)
+}
+
+func TestMainModel_QuestionMarkIsTypedInTextFields(t *testing.T) {
+	m := MainModel{nav: shared.NewNavigator(), width: 80, height: 24}
+	screen := filters.NewModel(nil, nil, 78, 20)
+	m.nav.Push(screen)
+
+	m, _ = update(m, keyPress("/"))
+	m, _ = update(m, keyPress("?"))
+
+	assert.False(t, m.fullHelp, "? goes into the search")
+	assert.NotContains(t, ansi.Strip(m.renderFooter(screen)), "? help", "and is not offered while typing")
+}
+
+func TestMainModel_OpeningAScreenHidesFullHelp(t *testing.T) {
+	m := newTestMainModel()
+	m, _ = update(m, keyPress("?"))
+
+	m, _ = update(m, shared.OpenOrgMsg{Key: shared.OrgKey{Name: "demo"}})
+	assert.False(t, m.fullHelp)
+
+	m, _ = update(m, keyPress("?"))
+	m, _ = update(m, shared.PreviousMsg{})
+	assert.False(t, m.fullHelp)
+}
+
+func TestRenderFooter_FitsEightyColumns(t *testing.T) {
+	m := MainModel{width: 80, nav: shared.NewNavigator()}
+	loaded := org.NewModel(&githubtest.Fake{}, shared.OrgKey{Name: "demo"}, 78, 20)
+	m.nav.Push(loaded)
+
+	for _, full := range []bool{false, true} {
+		m.fullHelp = full
+		footer := ansi.Strip(m.renderFooter(loaded))
+		for _, line := range strings.Split(footer, "\n") {
+			assert.LessOrEqual(t, lipgloss.Width(line), 80, "%q", line)
+		}
+		assert.NotContains(t, footer, "…", "nothing is cut off")
 	}
 }
 

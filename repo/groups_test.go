@@ -49,7 +49,7 @@ func TestNewRepoConfig_GroupsKeepDeclarationOrder(t *testing.T) {
 		names = append(names, p.Name)
 	}
 
-	assert.Equal(t, []string{"Merge Commit Allowed", "Rebase Merge Allowed", "Squash Merge Allowed", "Auto Merge Allowed", "Delete Branch On Merge", "Default Branch"}, names)
+	assert.Equal(t, []string{"Merge Commit Allowed", "Rebase Merge Allowed", "Squash Merge Allowed", "Auto Merge Allowed", "Delete Branch On Merge", "Allow Update Branch", "Web Commit Signoff Required", "Merge Commit Title", "Merge Commit Message", "Squash Merge Commit Title", "Squash Merge Commit Message", "Default Branch"}, names)
 }
 
 func keysOf(groups []Group) []string {
