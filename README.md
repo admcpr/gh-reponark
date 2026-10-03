@@ -17,8 +17,8 @@ gh extension install admcpr/gh-reponark
 
 ## Usage
 ``` 
-gh login
-gh hubbub
+gh auth login
+gh reponark
 ```
 
 ## Development

@@ -30,13 +30,15 @@ func TestRenderTabs_ActiveTabIsStyledDifferently(t *testing.T) {
 	second := RenderTabs(tabs, 60, 1)
 
 	assert.NotEqual(t, first, second)
-	assert.Equal(t, ansi.Strip(first), ansi.Strip(second), "only styling should differ between active tabs")
+	labels := func(bar string) string { return ansi.Strip(strings.Split(bar, "\n")[0]) }
+	assert.Equal(t, labels(first), labels(second), "only the underline should differ between active tabs")
 }
 
 func TestRenderTabs_ScrollsToActiveTab(t *testing.T) {
 	tabs := []string{"Overview", "Status", "Metrics", "Features", "Merge", "Permissions", "Security"}
 
-	rendered := ansi.Strip(RenderTabs(tabs, 30, 6))
+	bar := ansi.Strip(RenderTabs(tabs, 30, 6))
+	rendered := strings.Split(bar, "\n")[0]
 
 	assert.Equal(t, 30, len([]rune(rendered)), "the bar fills the width exactly")
 	assert.Contains(t, rendered, "Security")
@@ -48,4 +50,12 @@ func TestRenderTabs_ScrollsToActiveTab(t *testing.T) {
 func TestRenderTabs_ActiveOutOfRange(t *testing.T) {
 	rendered := ansi.Strip(RenderTabs([]string{"One", "Two"}, 20, 9))
 	assert.Contains(t, rendered, "One")
+}
+
+func TestRenderTabs_UnderlinesActiveTab(t *testing.T) {
+	lines := strings.Split(ansi.Strip(RenderTabs([]string{"One", "Two"}, 30, 1)), "\n")
+
+	assert.Len(t, lines, 2)
+	assert.Equal(t, 30, len([]rune(lines[1])), "the rule spans the pane")
+	assert.Equal(t, len([]rune("  Two  ")), strings.Count(lines[1], "━"))
 }

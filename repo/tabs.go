@@ -8,12 +8,12 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// RenderTabs draws a single-line tab bar with the active tab highlighted.
-// When the tabs are wider than width, it shows the tabs around the active one
+// RenderTabs draws a two-line tab bar: the labels, then a rule underneath with
+// a heavy underline beneath the active tab. When the tabs are wider than width, it shows the tabs around the active one
 // with ‹ and › marking the ones scrolled out of view.
 func RenderTabs(tabs []string, width, activeTab int) string {
 	if len(tabs) == 0 || width <= 0 {
-		return shared.Fit("", width)
+		return shared.Fit("", width) + "\n" + shared.Fit("", width)
 	}
 	if activeTab < 0 || activeTab >= len(tabs) {
 		activeTab = 0
@@ -21,9 +21,9 @@ func RenderTabs(tabs []string, width, activeTab int) string {
 
 	labels := make([]string, len(tabs))
 	for i, t := range tabs {
-		label := " " + t + " "
+		label := "  " + t + "  "
 		if i == activeTab {
-			labels[i] = shared.ActiveTabLabel.Render(label)
+			labels[i] = shared.AccentStyle.Bold(true).Render(label)
 		} else {
 			labels[i] = shared.DimStyle.Render(label)
 		}
@@ -57,12 +57,33 @@ func RenderTabs(tabs []string, width, activeTab int) string {
 		}
 	}
 
-	row := strings.Join(labels[lo:hi+1], shared.DimStyle.Render("│"))
+	// The rule runs under every visible tab and the gaps between them, with
+	// a heavy segment under the active one.
+	var row, rule strings.Builder
 	if lo > 0 {
-		row = shared.DimStyle.Render("‹ ") + row
+		row.WriteString(shared.DimStyle.Render("‹ "))
+		rule.WriteString(shared.DimStyle.Render("──"))
+	}
+	for i := lo; i <= hi; i++ {
+		if i > lo {
+			row.WriteString(" ")
+			rule.WriteString(shared.DimStyle.Render("─"))
+		}
+		row.WriteString(labels[i])
+		w := lipgloss.Width(labels[i])
+		if i == activeTab {
+			rule.WriteString(shared.AccentStyle.Render(strings.Repeat("━", w)))
+		} else {
+			rule.WriteString(shared.DimStyle.Render(strings.Repeat("─", w)))
+		}
 	}
 	if hi < len(tabs)-1 {
-		row += shared.DimStyle.Render(" ›")
+		row.WriteString(shared.DimStyle.Render(" ›"))
+		rule.WriteString(shared.DimStyle.Render("──"))
 	}
-	return shared.Fit(row, width)
+	// Carry the rule across the rest of the pane.
+	if pad := width - lipgloss.Width(rule.String()); pad > 0 {
+		rule.WriteString(shared.DimStyle.Render(strings.Repeat("─", pad)))
+	}
+	return shared.Fit(row.String(), width) + "\n" + shared.Fit(rule.String(), width)
 }

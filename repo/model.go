@@ -109,8 +109,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // inspectorChrome is the number of lines around the property grid: name,
-// description, tabs and a rule above it; a rule and two description lines below.
-const inspectorChrome = 7
+// description, a gap and the two-line tab bar above it; a rule and two
+// description lines below.
+const inspectorChrome = 8
 
 func (m Model) View() tea.View {
 	width := shared.Max(1, m.width)
@@ -119,9 +120,9 @@ func (m Model) View() tea.View {
 	lines := []string{
 		shared.StrongStyle.Render(m.repository.Name) + "  " + Badges(m.repository),
 		m.summary(),
-		RenderTabs(GroupTitles(), width, m.activeTab),
-		shared.DimStyle.Render(strings.Repeat("─", width)),
+		"",
 	}
+	lines = append(lines, strings.Split(RenderTabs(GroupTitles(), width, m.activeTab), "\n")...)
 
 	rows := m.propertyRows()
 	// The pane may have been resized since the focus last moved.
@@ -130,7 +131,7 @@ func (m Model) View() tea.View {
 	for i := offset; i < len(group.Properties) && i < offset+rows; i++ {
 		lines = append(lines, m.propertyRow(group.Properties[i], i == m.activeProperty, nameWidth, width))
 	}
-	for len(lines) < rows+4 {
+	for len(lines) < rows+5 {
 		lines = append(lines, "")
 	}
 

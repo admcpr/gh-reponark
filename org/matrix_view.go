@@ -11,9 +11,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// matrixChrome is the number of lines around the matrix rows: tabs, two
-// heading lines and a rule above; a rule, totals and the focused cell below.
-const matrixChrome = 7
+// matrixChrome is the number of lines around the matrix rows: the two-line
+// tab bar, two heading lines and a rule above; a rule, totals and the focused cell below.
+const matrixChrome = 8
 
 // matrixRows is how many repositories the matrix shows.
 func (m *Model) matrixRows() int { return shared.Max(1, m.height-matrixChrome) }
@@ -112,7 +112,7 @@ func (m *Model) matrixView() string {
 	}
 	shown, first, more := m.visibleColumns(columns, m.width-prefixWidth-2)
 
-	lines := []string{repo.RenderTabs(repo.GroupTitles(), m.width, m.repoModel.ActiveTab())}
+	lines := strings.Split(repo.RenderTabs(repo.GroupTitles(), m.width, m.repoModel.ActiveTab()), "\n")
 
 	for line := 0; line < 2; line++ {
 		row := strings.Repeat(" ", prefixWidth)
