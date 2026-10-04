@@ -15,6 +15,10 @@ type PropertySchema struct {
 	Group       string
 	Type        string
 	Description string
+	// Unit and Identifier are as on RepoProperty: how an integer is
+	// measured, and whether it names rather than measures.
+	Unit       string
+	Identifier bool
 }
 
 var (
@@ -32,6 +36,8 @@ func Schema() []PropertySchema {
 				Group:       p.Group,
 				Type:        p.Type,
 				Description: p.Description,
+				Unit:        p.Unit,
+				Identifier:  p.Identifier,
 			})
 		}
 	})

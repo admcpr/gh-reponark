@@ -10,13 +10,20 @@ import (
 )
 
 func main() {
-	client, err := github.NewClient()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "gh-reponark: %v\n", err)
-		os.Exit(1)
+	var svc github.Service
+	if os.Getenv("REPONARK_DEMO") != "" {
+		// Demo mode runs against built-in sample data instead of GitHub.
+		svc = demoService()
+	} else {
+		client, err := github.NewClient()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "gh-reponark: %v\n", err)
+			os.Exit(1)
+		}
+		svc = client
 	}
 
-	mainModel := NewMainModel(client)
+	mainModel := NewMainModel(svc)
 	// p := tea.NewProgram(mainModel, tea.WithKeyboardEnhancements())
 	p := tea.NewProgram(mainModel)
 

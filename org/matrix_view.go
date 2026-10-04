@@ -11,9 +11,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// matrixChrome is the number of lines around the matrix rows: the two-line
-// tab bar, two heading lines and a rule above; a rule, totals and the focused cell below.
-const matrixChrome = 8
+// matrixChrome is the number of lines around the matrix rows: the segmented
+// control, two heading lines and a rule above; a rule, totals and the
+// focused cell below.
+const matrixChrome = 7
 
 // matrixRows is how many repositories the matrix shows.
 func (m *Model) matrixRows() int { return shared.Max(1, m.height-matrixChrome) }
@@ -26,7 +27,7 @@ type matrixColumn struct {
 }
 
 func newMatrixColumn(p repo.PropertySchema) matrixColumn {
-	heading := splitHeading(shortName(p.Name))
+	heading := splitHeading(repo.ShortName(p.Name))
 	content := shared.Max(lipgloss.Width(heading[0]), lipgloss.Width(heading[1]))
 	switch p.Type {
 	case "int":
@@ -37,18 +38,6 @@ func newMatrixColumn(p repo.PropertySchema) matrixColumn {
 		content = shared.Max(content, 14)
 	}
 	return matrixColumn{property: p, heading: heading, width: shared.Min(content, 18) + 2}
-}
-
-// shortName drops the words every property in a group shares, so "Has Wiki
-// Enabled" is headed "Wiki".
-func shortName(name string) string {
-	for _, prefix := range []string{"Viewer Can ", "Viewer ", "Is ", "Has "} {
-		name = strings.TrimPrefix(name, prefix)
-	}
-	for _, suffix := range []string{" Enabled", " Allowed", " Count"} {
-		name = strings.TrimSuffix(name, suffix)
-	}
-	return name
 }
 
 // splitHeading breaks a heading over two lines where it makes the wider line
@@ -112,7 +101,9 @@ func (m *Model) matrixView() string {
 	}
 	shown, first, more := m.visibleColumns(columns, m.width-prefixWidth-2)
 
-	lines := strings.Split(repo.RenderTabs(repo.GroupTitles(), m.width, m.repoModel.ActiveTab()), "\n")
+	// The same segmented control as the inspector; the matrix is the only
+	// pane on screen, so it always has focus.
+	lines := []string{repo.RenderSegments(repo.GroupTitles(), m.width, m.repoModel.ActiveTab(), true)}
 
 	for line := 0; line < 2; line++ {
 		row := strings.Repeat(" ", prefixWidth)
@@ -140,7 +131,7 @@ func (m *Model) matrixView() string {
 	for r := m.matrixOffset; r < len(m.visible) && r < m.matrixOffset+rows; r++ {
 		lines = append(lines, m.matrixRow(m.visible[r], r == m.cursor, shown, first, nameWidth))
 	}
-	for len(lines) < rows+4 {
+	for len(lines) < rows+4 { // the control, two headings and the rule
 		lines = append(lines, strings.Repeat(" ", prefixWidth-2)+shared.DimStyle.Render("│"))
 	}
 
@@ -190,8 +181,9 @@ func focusCell(cell string) string {
 }
 
 // matrixTotals counts, under each yes/no column, how many visible
-// repositories have the setting on. Mixed columns are highlighted because
-// they are the ones worth a closer look.
+// repositories have the setting on: good when every repository has it,
+// dim when none does, and amber when the column is mixed, because those are
+// the ones worth a closer look.
 func (m *Model) matrixTotals(shown []matrixColumn, prefixWidth int) string {
 	row := shared.DimStyle.Render(shared.Fit("  on", prefixWidth-2) + "│ ")
 	for _, col := range shown {
@@ -206,8 +198,11 @@ func (m *Model) matrixTotals(shown []matrixColumn, prefixWidth int) string {
 			}
 		}
 		style := shared.DimStyle
-		if on > 0 && on < len(m.visible) {
-			style = shared.AccentStyle
+		switch {
+		case on > 0 && on < len(m.visible):
+			style = shared.WarnStyle
+		case on > 0:
+			style = shared.GoodStyle
 		}
 		row += style.Render(shared.Fit(fmt.Sprintf("%d/%d", on, len(m.visible)), col.width))
 	}

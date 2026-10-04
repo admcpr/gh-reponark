@@ -872,14 +872,6 @@ func TestSplitHeading(t *testing.T) {
 	assert.Equal(t, [2]string{"Delete Branch", "On Merge"}, splitHeading("Delete Branch On Merge"))
 }
 
-func TestShortName(t *testing.T) {
-	assert.Equal(t, "Wiki", shortName("Has Wiki Enabled"))
-	assert.Equal(t, "Archived", shortName("Is Archived"))
-	assert.Equal(t, "Administer", shortName("Viewer Can Administer"))
-	assert.Equal(t, "Stargazer", shortName("Stargazer Count"))
-	assert.Equal(t, "Default Branch", shortName("Default Branch"))
-}
-
 func TestModel_ProgressView(t *testing.T) {
 	m := newOrgModel()
 

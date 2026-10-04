@@ -32,6 +32,33 @@ func FitRight(s string, width int) string {
 	return strings.Repeat(" ", width-lipgloss.Width(s)) + s
 }
 
+// Wrap word-wraps text to width and renders each line in style, one string
+// per line. Lines are not padded, so a caller can join or fit them freely.
+func Wrap(style lipgloss.Style, text string, width int) []string {
+	lines := strings.Split(lipgloss.NewStyle().Width(width).Render(text), "\n")
+	for i, line := range lines {
+		lines[i] = style.Render(strings.TrimRight(line, " "))
+	}
+	return lines
+}
+
+// JoinFit joins items with sep for as long as the line stays within width.
+// An item is never cut: the first that does not fit ends the line, and the
+// count of items left out is returned.
+func JoinFit(items []string, sep string, width int) (line string, dropped int) {
+	for i, item := range items {
+		next := item
+		if i > 0 {
+			next = line + sep + item
+		}
+		if lipgloss.Width(next) > width {
+			return line, len(items) - i
+		}
+		line = next
+	}
+	return line, 0
+}
+
 // Lines pads or trims a block of text to exactly height lines of width cells.
 func Lines(lines []string, width, height int) string {
 	out := make([]string, height)

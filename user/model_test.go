@@ -36,10 +36,9 @@ func newTestModel() *Model {
 }
 
 func itemTitles(m *Model) []string {
-	items := m.orgList.Items()
-	titles := make([]string, len(items))
-	for i, item := range items {
-		titles[i] = item.(shared.ListItem).Title()
+	titles := make([]string, len(m.items))
+	for i, item := range m.items {
+		titles[i] = item.Title()
 	}
 	return titles
 }
@@ -50,7 +49,7 @@ func TestNewModel(t *testing.T) {
 	assert.Equal(t, 80, m.width)
 	assert.Equal(t, 24, m.height)
 	assert.Equal(t, "", m.login)
-	assert.Empty(t, m.orgList.Items())
+	assert.Empty(t, m.items)
 }
 
 func TestModel_SetDimensions(t *testing.T) {
@@ -94,8 +93,7 @@ func TestModel_SetUser(t *testing.T) {
 	assert.Equal(t, []string{"octocat", "alpha", "mike", "zulu"}, itemTitles(m),
 		"the user should be first followed by organisations sorted by login")
 
-	first := m.orgList.Items()[0].(shared.ListItem)
-	assert.Equal(t, "https://github.com/octocat", first.Description())
+	assert.Equal(t, "https://github.com/octocat", m.items[0].Description())
 }
 
 func TestModel_SetUser_NoOrganizations(t *testing.T) {
@@ -154,25 +152,66 @@ func TestModel_Update_EnterSelectsOrgKey(t *testing.T) {
 	}
 }
 
-func TestModel_Update_OtherKeysGoToList(t *testing.T) {
+func TestModel_Update_ArrowsMoveTheCursor(t *testing.T) {
 	m := newTestModel()
 	m.SetUser(newTestUser("octocat", "acme"))
-	assert.Equal(t, 0, m.orgList.Index())
+	assert.Equal(t, 0, m.cursor)
 
 	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	assert.Equal(t, 1, m.orgList.Index())
+	assert.Equal(t, 1, m.cursor)
+
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	assert.Equal(t, 1, m.cursor, "the cursor stops at the end")
 
 	m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
-	assert.Equal(t, 0, m.orgList.Index())
+	assert.Equal(t, 0, m.cursor)
+
+	m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	assert.Equal(t, 0, m.cursor, "and at the start")
 }
 
-func TestModel_Update_NonKeyMessagesGoToList(t *testing.T) {
+func TestModel_Update_PagingKeys(t *testing.T) {
+	m := NewModel(&githubtest.Fake{}, 80, 4) // three rows under the heading
+	m.SetUser(newTestUser("octocat", "a", "b", "c", "d", "e", "f"))
+
+	m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	assert.Equal(t, 3, m.cursor, "page down moves a screenful")
+	assert.Equal(t, 1, m.offset, "and scrolls the list to keep the cursor in view")
+
+	m.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
+	assert.Equal(t, 6, m.cursor)
+	assert.Equal(t, 4, m.offset)
+	content := plain(m.View())
+	assert.Contains(t, content, "f")
+	assert.NotContains(t, content, "octocat", "rows scrolled off the top are hidden")
+
+	m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	assert.Equal(t, 3, m.cursor)
+
+	m.Update(tea.KeyPressMsg{Code: 'g', Text: "g"})
+	assert.Equal(t, 0, m.cursor)
+	assert.Equal(t, 0, m.offset)
+}
+
+func TestModel_SetDimensions_KeepsCursorInView(t *testing.T) {
+	m := NewModel(&githubtest.Fake{}, 80, 10)
+	m.SetUser(newTestUser("octocat", "a", "b", "c", "d", "e", "f"))
+	m.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
+	assert.Equal(t, 0, m.offset, "everything fits at ten rows")
+
+	m.SetDimensions(80, 4)
+
+	assert.Equal(t, 4, m.offset, "a shorter pane scrolls to the cursor")
+}
+
+func TestModel_Update_NonKeyMessagesAreIgnored(t *testing.T) {
 	m := newTestModel()
 	m.SetUser(newTestUser("octocat", "acme"))
 
-	updated, _ := m.Update(tea.WindowSizeMsg{Width: 10, Height: 10})
+	updated, cmd := m.Update(tea.WindowSizeMsg{Width: 10, Height: 10})
 
 	assert.Same(t, m, updated)
+	assert.Nil(t, cmd)
 	assert.Equal(t, []string{"octocat", "acme"}, itemTitles(m))
 }
 
@@ -205,17 +244,22 @@ func TestModel_Help(t *testing.T) {
 	help := m.Help()
 
 	assert.Equal(t, "j/k org  enter open  esc quit", help.String())
-	assert.Len(t, help.FullHelp(), 2, "the full view adds the list's paging keys")
+	if assert.Len(t, help.FullHelp(), 2, "the full view adds the paging keys") {
+		assert.Len(t, help.FullHelp()[0], 4)
+		assert.Equal(t, "first/last", help.FullHelp()[0][3].Help().Desc)
+	}
 }
 
-func TestModel_ListFilterIsOff(t *testing.T) {
+func TestModel_IgnoresUnboundKeys(t *testing.T) {
 	m := newTestModel()
 	m.SetUser(newTestUser("octocat", "acme"))
 
-	m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	before := plain(m.View())
+	_, cmd := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	assert.Nil(t, cmd)
+	assert.Equal(t, before, plain(m.View()))
 
-	assert.NotContains(t, plain(m.View()), "Filter:", "the list's own filter prompt cannot be finished, so it stays off")
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	_, cmd = m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	assert.Nil(t, cmd, "q does not quit; esc and ctrl+c do")
 }
 
@@ -232,18 +276,14 @@ func TestModel_Update_EscGoesBack(t *testing.T) {
 	}
 }
 
-func TestModel_ListUsesKeyMapBindings(t *testing.T) {
+func TestModel_VimKeysMoveTheCursor(t *testing.T) {
 	m := newTestModel()
 	m.SetUser(newTestUser("octocat", "acme", "globex"))
 
-	// The vim keys come from the key map, not the list's defaults.
 	m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
-	assert.Equal(t, 1, m.orgList.Index())
+	assert.Equal(t, 1, m.cursor)
 	m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
-	assert.Equal(t, 0, m.orgList.Index())
-
-	assert.Equal(t, m.keymap.Up.Keys(), m.orgList.KeyMap.CursorUp.Keys())
-	assert.Equal(t, m.keymap.Down.Keys(), m.orgList.KeyMap.CursorDown.Keys())
+	assert.Equal(t, 0, m.cursor)
 }
 
 func TestUserKeyMap(t *testing.T) {
@@ -251,6 +291,10 @@ func TestUserKeyMap(t *testing.T) {
 
 	assert.Equal(t, []string{"up", "k"}, keymap.Up.Keys())
 	assert.Equal(t, []string{"down", "j"}, keymap.Down.Keys())
+	assert.Equal(t, []string{"left", "h", "pgup", "b", "u"}, keymap.PageUp.Keys())
+	assert.Equal(t, []string{"right", "l", "pgdown", "f", "d"}, keymap.PageDown.Keys())
+	assert.Equal(t, []string{"home", "g"}, keymap.Top.Keys())
+	assert.Equal(t, []string{"end", "G"}, keymap.Bottom.Keys())
 	assert.Equal(t, []string{"enter"}, keymap.Select.Keys())
 	assert.Equal(t, []string{"esc"}, keymap.Back.Keys())
 }

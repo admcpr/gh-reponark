@@ -4,8 +4,8 @@ import "time"
 
 type Repository struct {
 	// Overview
-	Id                       string `graphql:"id" group:"1⟭ Overview" desc:"The Node ID of the Repository."`
-	DatabaseID               int    `graphql:"databaseId" group:"1⟭ Overview" desc:"Identifies the primary key from the database."`
+	Id                       string `graphql:"id" group:"1⟭ Overview" kind:"id" desc:"The Node ID of the Repository."`
+	DatabaseID               int    `graphql:"databaseId" group:"1⟭ Overview" kind:"id" desc:"Identifies the primary key from the database."`
 	Name                     string `graphql:"name" group:"1⟭ Overview" desc:"The name of the repository."`
 	NameWithOwner            string `graphql:"nameWithOwner" group:"1⟭ Overview" desc:"The repository's name with owner (e.g., octocat/hello-world)."`
 	Url                      string `graphql:"url" group:"1⟭ Overview" desc:"The HTTP URL for this repository."`
@@ -42,7 +42,7 @@ type Repository struct {
 	LockReason                    string    `graphql:"lockReason" group:"2⟭ Status" desc:"The reason the repository has been locked."`
 
 	// Metrics
-	DiskUsage      int `graphql:"diskUsage" group:"3⟭ Metrics" desc:"The number of kilobytes this repository occupies on disk."`
+	DiskUsage      int `graphql:"diskUsage" group:"3⟭ Metrics" unit:"kb" desc:"The number of kilobytes this repository occupies on disk."`
 	ForkCount      int `graphql:"forkCount" group:"3⟭ Metrics" desc:"Returns how many forks there are of this repository in the whole network."`
 	StargazerCount int `graphql:"stargazerCount" group:"3⟭ Metrics" desc:"Returns a count of how many stargazers there are on this repository."`
 	// WatcherCount   int `graphql:"watcherCount" group:"3⟭ Metrics" desc:"The number of watchers this repository has."`

@@ -30,6 +30,9 @@ func TestSchema(t *testing.T) {
 	assert.Equal(t, "time.Time", byName["Created At"].Type)
 	assert.Equal(t, "bool", byName["Is Archived"].Type)
 	assert.Equal(t, "int", byName["Open Pull Requests"].Type)
+	assert.Equal(t, "kb", byName["Disk Usage"].Unit)
+	assert.True(t, byName["Database ID"].Identifier)
+	assert.False(t, byName["Stargazer Count"].Identifier)
 }
 
 func TestSchema_MatchesToProperties(t *testing.T) {
@@ -43,6 +46,8 @@ func TestSchema_MatchesToProperties(t *testing.T) {
 		assert.Equal(t, p.Group, actual.Group)
 		assert.Equal(t, p.Type, actual.Type)
 		assert.Equal(t, p.Description, actual.Description)
+		assert.Equal(t, p.Unit, actual.Unit)
+		assert.Equal(t, p.Identifier, actual.Identifier)
 	}
 }
 

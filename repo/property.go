@@ -71,6 +71,12 @@ type RepoProperty struct {
 	Value       interface{}
 	Type        string
 	Description string
+	// Unit is how an integer is measured, e.g. "kb" for a size reported in
+	// kilobytes; empty for a plain count.
+	Unit string
+	// Identifier marks a value that names something rather than measures
+	// it, so it gets no bar or rank.
+	Identifier bool
 }
 
 func (s RepoProperty) String() string {
@@ -115,9 +121,15 @@ func processField(field reflect.StructField, value reflect.Value) []RepoProperty
 	desc := field.Tag.Get("desc")
 	group := field.Tag.Get("group")
 	typeStr := field.Type.String()
+	property := func(v interface{}) RepoProperty {
+		p := NewRepoProperty(name, group, v, typeStr, desc)
+		p.Unit = field.Tag.Get("unit")
+		p.Identifier = field.Tag.Get("kind") == "id"
+		return p
+	}
 
 	if typeStr == "time.Time" || typeStr == "int" || typeStr == "string" || typeStr == "bool" {
-		properties = append(properties, NewRepoProperty(name, group, value.Interface(), typeStr, desc))
+		properties = append(properties, property(value.Interface()))
 	} else {
 		switch field.Type.Kind() {
 		case reflect.Struct:
@@ -132,7 +144,7 @@ func processField(field reflect.StructField, value reflect.Value) []RepoProperty
 			if !value.IsNil() && value.Elem().Kind() == reflect.Struct {
 				properties = append(properties, processField(field, value.Elem())...)
 			} else {
-				properties = append(properties, NewRepoProperty(name, group, value.Interface(), typeStr, desc))
+				properties = append(properties, property(value.Interface()))
 			}
 		}
 	}

@@ -212,6 +212,8 @@ func (m *Model) finishLoading() tea.Cmd {
 	sort.Slice(m.repos, func(i, j int) bool {
 		return m.repos[i].Name < m.repos[j].Name
 	})
+	// The inspector draws each repository's counts against the whole org.
+	m.repoModel.SetOrgRepos(m.repos)
 	if len(m.repos) > 0 {
 		m.applyFilters()
 	}

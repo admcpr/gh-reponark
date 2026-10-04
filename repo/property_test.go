@@ -96,10 +96,12 @@ func TestToProperties_Values(t *testing.T) {
 	properties := ToProperties(repo)
 
 	tests := []struct {
-		name      string
-		wantValue interface{}
-		wantType  string
-		wantGroup string
+		name           string
+		wantValue      interface{}
+		wantType       string
+		wantGroup      string
+		wantUnit       string
+		wantIdentifier bool
 	}{
 		{name: "Name", wantValue: "test-repo", wantType: "string", wantGroup: "1⟭ Overview"},
 		{name: "Is Archived", wantValue: true, wantType: "bool", wantGroup: "2⟭ Status"},
@@ -109,7 +111,9 @@ func TestToProperties_Values(t *testing.T) {
 		{name: "Open Issues", wantValue: 3, wantType: "int", wantGroup: "3⟭ Metrics"},
 		{name: "Open Pull Requests", wantValue: 5, wantType: "int", wantGroup: "3⟭ Metrics"},
 		{name: "Default Branch", wantValue: "main", wantType: "string", wantGroup: "5⟭ Merge"},
-		{name: "Database ID", wantValue: 0, wantType: "int", wantGroup: "1⟭ Overview"},
+		{name: "Database ID", wantValue: 0, wantType: "int", wantGroup: "1⟭ Overview", wantIdentifier: true},
+		{name: "Id", wantValue: "", wantType: "string", wantGroup: "1⟭ Overview", wantIdentifier: true},
+		{name: "Disk Usage", wantValue: 0, wantType: "int", wantGroup: "3⟭ Metrics", wantUnit: "kb"},
 	}
 
 	for _, tt := range tests {
@@ -122,6 +126,8 @@ func TestToProperties_Values(t *testing.T) {
 			assert.Equal(t, tt.wantValue, p.Value)
 			assert.Equal(t, tt.wantType, p.Type)
 			assert.Equal(t, tt.wantGroup, p.Group)
+			assert.Equal(t, tt.wantUnit, p.Unit)
+			assert.Equal(t, tt.wantIdentifier, p.Identifier)
 			assert.NotEmpty(t, p.Description)
 		})
 	}

@@ -119,19 +119,17 @@ func (e *boolEditor) Blur()          {}
 
 // boolChoiceColors colour each choice by what it means: any is neutral,
 // yes and no are the good and bad colours.
-var boolChoiceColors = []color.Color{shared.AppColors.Blue, shared.AppColors.Green, shared.AppColors.Red}
+var boolChoiceColors = []color.Color{shared.AppColors.Blue, shared.AppColors.Good, shared.AppColors.Bad}
 
-func (e *boolEditor) View(focused bool, width int) []string {
+// View draws the choices as a segmented control: the chosen one a solid pill
+// in its colour, the rest ghosted, as in the inspector's group control.
+func (e *boolEditor) View(_ bool, _ int) []string {
 	options := make([]string, len(boolChoices))
 	for i, choice := range boolChoices {
-		label := "  " + choice + "  "
-		switch {
-		case i == e.choice:
-			options[i] = shared.PillStyle(boolChoiceColors[i]).Render(label)
-		case focused:
-			options[i] = shared.TextBodyStyle.Render(label)
-		default:
-			options[i] = shared.DimStyle.Render(label)
+		if i == e.choice {
+			options[i] = shared.Pill(choice, boolChoiceColors[i])
+		} else {
+			options[i] = shared.GhostPill(choice)
 		}
 	}
 	return []string{strings.Join(options, " ")}
@@ -198,7 +196,7 @@ func (e *rangeEditor) View(focused bool, width int) []string {
 		lines = append(lines, label+e.inputs[i].View())
 	}
 	if _, err := e.Filter(); err != nil {
-		lines = append(lines, shared.ErrorStyle.Render(err.Error()))
+		lines = append(lines, shared.BadStyle.Render(err.Error()))
 	}
 	return lines
 }
@@ -356,7 +354,7 @@ func newInput(placeholder, value string) textinput.Model {
 	styles.Blurred.Text = shared.ValueStyle
 	styles.Focused.Placeholder = shared.DimStyle
 	styles.Blurred.Placeholder = shared.DimStyle
-	styles.Cursor.Color = shared.AppColors.Cyan
+	styles.Cursor.Color = shared.AppColors.Accent
 	input.SetStyles(styles)
 	return input
 }

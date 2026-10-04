@@ -20,6 +20,42 @@ func TestFitRight(t *testing.T) {
 	assert.Equal(t, "abcd…", FitRight("abcdefgh", 5))
 }
 
+func TestWrap(t *testing.T) {
+	lines := Wrap(GoodStyle, "one two three four", 9)
+
+	assert.Equal(t, []string{"one two", "three", "four"}, stripAll(lines))
+	assert.NotEqual(t, "one two", lines[0], "every line is rendered in the style")
+	assert.Equal(t, []string{""}, stripAll(Wrap(GoodStyle, "", 9)))
+}
+
+func TestJoinFit(t *testing.T) {
+	items := []string{"aa", "bbb", "c"}
+
+	line, dropped := JoinFit(items, " · ", 20)
+	assert.Equal(t, "aa · bbb · c", line)
+	assert.Equal(t, 0, dropped)
+
+	line, dropped = JoinFit(items, " · ", 9)
+	assert.Equal(t, "aa · bbb", line, "an item that does not fit ends the line")
+	assert.Equal(t, 1, dropped)
+
+	line, dropped = JoinFit(items, " · ", 1)
+	assert.Equal(t, "", line)
+	assert.Equal(t, 3, dropped)
+
+	line, dropped = JoinFit(nil, " · ", 10)
+	assert.Equal(t, "", line)
+	assert.Equal(t, 0, dropped)
+}
+
+func stripAll(lines []string) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = ansi.Strip(l)
+	}
+	return out
+}
+
 func TestLines(t *testing.T) {
 	assert.Equal(t, "a  \nbc…\n   ", Lines([]string{"a", "bcdef"}, 3, 3), "short blocks are padded")
 	assert.Equal(t, "a  \nb  ", Lines([]string{"a", "b", "c"}, 3, 2), "tall blocks are trimmed")
@@ -60,5 +96,5 @@ func TestHighlightRow(t *testing.T) {
 }
 
 func TestBackgroundSequence(t *testing.T) {
-	assert.Equal(t, "\x1b[48;2;18;42;51m", backgroundSequence(AppColors.Selection))
+	assert.Equal(t, "\x1b[48;2;30;42;74m", backgroundSequence(AppColors.Selection))
 }

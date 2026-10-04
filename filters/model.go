@@ -261,23 +261,23 @@ func (m *Model) updateList(msg tea.KeyPressMsg) tea.Cmd {
 // ---- view
 
 // propertyType is how each kind of property is marked: a glyph beside it in
-// the list and a coloured label in the editor.
+// the list, coloured the way the inspector colours that kind of value, and
+// the same type pill as the inspector's footer card in the editor.
 type propertyType struct {
 	glyph string
-	label string
 	color color.Color
 }
 
 func typeOf(t string) propertyType {
 	switch t {
 	case "bool":
-		return propertyType{"●", "yes / no", shared.AppColors.Green}
+		return propertyType{"●", shared.AppColors.Good}
 	case "int":
-		return propertyType{"#", "number", shared.AppColors.BrightYellow}
+		return propertyType{"#", shared.AppColors.Link}
 	case "time.Time":
-		return propertyType{"◆", "date", shared.AppColors.BrightPurple}
+		return propertyType{"◆", shared.AppColors.Purple}
 	default:
-		return propertyType{"¶", "text", shared.AppColors.BrightBlue}
+		return propertyType{"¶", shared.AppColors.Dim}
 	}
 }
 
@@ -299,7 +299,7 @@ func (m *Model) editorWidth() int { return shared.Max(1, m.width-m.listWidth()-4
 
 func (m *Model) View() tea.View {
 	list := shared.Lines(m.listLines(), m.listWidth(), m.height)
-	rule := lipgloss.NewStyle().Foreground(shared.AppColors.Blue).Render("│")
+	rule := shared.DimStyle.Render("│")
 	divider := strings.TrimSuffix(strings.Repeat(rule+"\n", m.height), "\n")
 	editor := shared.Lines(m.editorLines(), m.editorWidth(), m.height)
 	gap := strings.TrimSuffix(strings.Repeat(" \n", m.height), "\n")
@@ -328,7 +328,7 @@ func (m *Model) listLines() []string {
 		p := m.properties[index]
 		if p.Group != group {
 			group = p.Group
-			rows = append(rows, heading(repo.GroupTitle(group), "", width))
+			rows = append(rows, headingLabel(repo.GroupTitle(group)))
 		}
 		if i == m.cursor {
 			cursorLine = len(rows)
@@ -351,16 +351,24 @@ func (m *Model) listLines() []string {
 	return append(lines, rows[m.offset:end]...)
 }
 
-// heading is a section title followed by a rule to the edge, with optional
-// detail on the right, e.g. "Matching ──────── 3 of 9".
+// headingLabel is a section title in the column-heading style: upper case
+// and dim, the way the list's group headings and the editor's sections are
+// both set.
+func headingLabel(title string) string {
+	return shared.ColumnHeading.Render(strings.ToUpper(title))
+}
+
+// heading is a headingLabel followed by a dim rule to the edge that keeps
+// the editor's sections apart, with optional detail on the right, e.g.
+// "MATCHING ──────── 3 of 9".
 func heading(title, detail string, width int) string {
-	left := shared.HeadingStyle.Render(title) + " "
+	left := headingLabel(title) + " "
 	right := ""
 	if detail != "" {
 		right = " " + shared.AccentStyle.Render(detail)
 	}
 	fill := shared.Max(0, width-lipgloss.Width(left)-lipgloss.Width(right))
-	return left + lipgloss.NewStyle().Foreground(shared.AppColors.Blue).Render(strings.Repeat("─", fill)) + right
+	return left + shared.DimStyle.Render(strings.Repeat("─", fill)) + right
 }
 
 func (m *Model) propertyRow(p repo.PropertySchema, highlighted bool, width int) string {
@@ -394,8 +402,8 @@ func (m *Model) propertyRow(p repo.PropertySchema, highlighted bool, width int) 
 	return row
 }
 
-// chips shows each active filter as a chip, with a count of any that do not
-// fit on the line.
+// chips shows each active filter as a chip in the accent tint, the way the
+// inspector shows posture, with a count of any that do not fit on the line.
 func (m *Model) chips(width int) string {
 	if len(m.filters) == 0 {
 		return shared.DimStyle.Render("No filters yet: every repo is shown")
@@ -408,7 +416,7 @@ func (m *Model) chips(width int) string {
 
 	line := ""
 	for i, name := range names {
-		chip := shared.ChipStyle.Render(" " + name + ": " + m.filters[name].Condition() + " ")
+		chip := shared.TintedPill(name+": "+m.filters[name].Condition(), shared.AppColors.Accent, shared.AppColors.AccentTint)
 		more := ""
 		if rest := len(names) - i - 1; rest > 0 {
 			more = shared.AccentStyle.Render(fmt.Sprintf(" +%d", rest))
@@ -433,11 +441,10 @@ func (m *Model) editorLines() []string {
 	kind := typeOf(p.Type)
 
 	lines := []string{
-		kind.Glyph() + " " + shared.StrongStyle.Render(p.Name) + "  " +
-			shared.PillStyle(kind.color).Render(" "+kind.label+" "),
-		lipgloss.NewStyle().Foreground(shared.AppColors.Blue).Render("in " + repo.GroupTitle(p.Group)),
+		kind.Glyph() + " " + shared.StrongStyle.Render(p.Name) + " " + repo.TypePill(p.Type),
+		shared.DimStyle.Render("in " + repo.GroupTitle(p.Group)),
 	}
-	lines = append(lines, wrap(shared.TextBodyStyle, p.Description, width)...)
+	lines = append(lines, shared.Wrap(shared.TextBodyStyle, p.Description, width)...)
 
 	lines = append(lines, "", heading("Filter", "", width))
 	lines = append(lines, m.editor.View(m.editing, width)...)
@@ -455,15 +462,8 @@ func (m *Model) editorLines() []string {
 	return append(lines, matchingNames(matching, width, room)...)
 }
 
-// wrap renders text in style, wrapped to width, one string per line.
-func wrap(style lipgloss.Style, text string, width int) []string {
-	wrapped := lipgloss.NewStyle().Width(width).Render(text)
-	lines := strings.Split(wrapped, "\n")
-	for i, line := range lines {
-		lines[i] = style.Render(line)
-	}
-	return lines
-}
+// chartSpan is the widest a chart's bar or sparkline is drawn.
+const chartSpan = 40
 
 // chart shows how the loaded repositories' values of p are spread, so a
 // filter can be chosen without guessing.
@@ -476,7 +476,7 @@ func (m *Model) chart(p repo.PropertySchema, width int) []string {
 		for i, c := range m.repos {
 			values[i] = float64(c.Int(p.Name))
 		}
-		return rangeChart(values, width, shared.StarStyle, func(v float64) string { return fmt.Sprint(int(v)) })
+		return rangeChart(values, width, func(v float64) string { return fmt.Sprint(int(v)) })
 	case "time.Time":
 		var values []float64
 		for _, c := range m.repos {
@@ -487,8 +487,7 @@ func (m *Model) chart(p repo.PropertySchema, width int) []string {
 		if len(values) == 0 {
 			return []string{shared.TextBodyStyle.Render("No repos have this date set")}
 		}
-		lines := rangeChart(values, width, lipgloss.NewStyle().Foreground(shared.AppColors.BrightPurple),
-			func(v float64) string { return time.Unix(int64(v), 0).UTC().Format("2006-01-02") })
+		lines := rangeChart(values, width, func(v float64) string { return time.Unix(int64(v), 0).UTC().Format("2006-01-02") })
 		if missing := len(m.repos) - len(values); missing > 0 {
 			lines = append(lines, shared.DimStyle.Render(fmt.Sprintf("%d with no date", missing)))
 		}
@@ -498,7 +497,8 @@ func (m *Model) chart(p repo.PropertySchema, width int) []string {
 	}
 }
 
-// boolChart is one bar split into the repos with the property on and off.
+// boolChart is the share of repos with the property on, as the same
+// fraction bar the inspector draws under a toggle, with the counts below.
 func boolChart(repos []repo.RepoConfig, name string, width int) []string {
 	yes := 0
 	for _, c := range repos {
@@ -506,25 +506,26 @@ func boolChart(repos []repo.RepoConfig, name string, width int) []string {
 			yes++
 		}
 	}
-	on, off := blocks(float64(yes)/float64(len(repos)), shared.Min(width, 40))
 	return []string{
-		shared.GoodStyle.Render(on) + shared.BadStyle.Render(off),
+		repo.FractionBar(yes, len(repos), shared.Min(width, chartSpan)),
 		shared.GoodStyle.Render("● yes ") + shared.ValueStyle.Render(fmt.Sprint(yes)) + "   " +
-			shared.BadStyle.Render("● no ") + shared.ValueStyle.Render(fmt.Sprint(len(repos)-yes)),
+			shared.DimStyle.Render("○ no ") + shared.ValueStyle.Render(fmt.Sprint(len(repos)-yes)),
 	}
 }
 
 // rangeChart is a sparkline of how values spread between the smallest and
-// largest, labelled at both ends, with the median below.
-func rangeChart(values []float64, width int, style lipgloss.Style, format func(float64) string) []string {
+// largest, labelled at both ends, with the median below. The bars are in
+// the accent colour and empty buckets keep a baseline, like the inspector's
+// histogram.
+func rangeChart(values []float64, width int, format func(float64) string) []string {
 	sorted := append([]float64(nil), values...)
 	sort.Float64s(sorted)
 	lo, hi, median := sorted[0], sorted[len(sorted)-1], sorted[len(sorted)/2]
 
-	span := shared.Min(width, 40)
+	span := shared.Min(width, chartSpan)
 	labels := shared.Fit(shared.ValueStyle.Render(format(lo)), span/2) + shared.FitRight(shared.ValueStyle.Render(format(hi)), span-span/2)
 	return []string{
-		style.Render(sparkline(histogram(values, span))),
+		repo.Sparkline(histogram(values, span), -1, shared.AccentStyle),
 		labels,
 		shared.TextBodyStyle.Render("median ") + shared.ValueStyle.Render(format(median)),
 	}
@@ -559,15 +560,14 @@ func textChart(repos []repo.RepoConfig, name string, width int) []string {
 
 	labelWidth := shared.Min(16, width/3)
 	barWidth := shared.Max(1, shared.Min(24, width-labelWidth-5))
-	bar := lipgloss.NewStyle().Foreground(shared.AppColors.BrightBlue)
 	lines := make([]string, len(values))
 	for i, v := range values {
 		label := shared.ValueStyle.Render(shared.Fit(v, labelWidth))
 		if v == "" {
 			label = shared.DimStyle.Render(shared.Fit("(none)", labelWidth))
 		}
-		filled, _ := blocks(float64(counts[v])/float64(counts[values[0]]), barWidth)
-		lines[i] = label + " " + bar.Render(filled) + " " + shared.ValueStyle.Render(fmt.Sprint(counts[v]))
+		share := shared.Share(float64(counts[v])/float64(counts[values[0]]), barWidth)
+		lines[i] = label + " " + shared.Bar(share, barWidth, shared.AccentStyle) + " " + shared.ValueStyle.Render(fmt.Sprint(counts[v]))
 	}
 	return lines
 }

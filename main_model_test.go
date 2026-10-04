@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -319,11 +320,36 @@ func TestRenderTopEdge(t *testing.T) {
 	top := &titledModel{title: "Filters", status: "3 of 9 repos match"}
 	m.nav.Push(top)
 
-	edge := ansi.Strip(m.renderTopEdge(top, 60))
+	edge := ansi.Strip(m.renderTopEdge(top, 60, 20))
 
 	assert.Equal(t, 60, lipgloss.Width(edge))
 	assert.True(t, strings.HasPrefix(edge, "┌─ reponark › acme › Filters ──"), edge)
 	assert.True(t, strings.HasSuffix(edge, "── 3 of 9 repos match ─┐"), edge)
+}
+
+func TestRenderTopEdge_ContinuesTheBodyGradient(t *testing.T) {
+	m := MainModel{nav: shared.NewNavigator()}
+	m.nav.Push(&plainModel{})
+
+	// A frame drawn in one piece by Lip Gloss, and the same frame as the
+	// app draws it: a hand-made top edge over a body without one.
+	whole := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).
+		BorderForegroundBlend(shared.FrameGradient(true)...).
+		Width(30).Height(7).Render(strings.Repeat("\n", 4))
+	body := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, true, true, true).
+		BorderForegroundBlend(shared.FrameGradient(true)...).
+		Width(30).Height(6).Render(strings.Repeat("\n", 4))
+	edge := m.renderTopEdge(&plainModel{}, 30, 5)
+
+	wholeLines := strings.Split(whole, "\n")
+	assert.Equal(t, wholeLines[1:], strings.Split(body, "\n"), "the body is the frame without its top edge")
+	// The corners are the first and last cells of the top edge; they carry
+	// the colours either side of the join with the right and left edges.
+	foregrounds := regexp.MustCompile(`\x1b\[38;2;\d+;\d+;\d+m`)
+	want, got := foregrounds.FindAllString(wholeLines[0], -1), foregrounds.FindAllString(edge, -1)
+	assert.Equal(t, 30, len(want))
+	assert.Equal(t, want[0], got[0], "the top edge starts on the colour Lip Gloss would use")
+	assert.Equal(t, want[len(want)-10:], got[len(got)-10:], "and its rule runs on to the corner in the same colours")
 }
 
 func TestRenderTopEdge_Narrow(t *testing.T) {
@@ -332,7 +358,7 @@ func TestRenderTopEdge_Narrow(t *testing.T) {
 	top := &titledModel{title: "Filters", status: "3 of 9 repos match"}
 	m.nav.Push(top)
 
-	edge := ansi.Strip(m.renderTopEdge(top, 36))
+	edge := ansi.Strip(m.renderTopEdge(top, 36, 20))
 
 	assert.Equal(t, 36, lipgloss.Width(edge))
 	assert.NotContains(t, edge, "repos match", "the status goes first")
@@ -343,7 +369,7 @@ func TestRenderTopEdge_UntitledScreen(t *testing.T) {
 	m := MainModel{nav: shared.NewNavigator()}
 	m.nav.Push(&plainModel{})
 
-	edge := ansi.Strip(m.renderTopEdge(&plainModel{}, 30))
+	edge := ansi.Strip(m.renderTopEdge(&plainModel{}, 30, 20))
 
 	assert.Equal(t, "┌─ reponark ─────────────────┐", edge)
 }
@@ -358,7 +384,7 @@ func TestRenderFooter(t *testing.T) {
 	}{
 		{name: "help provider", model: user.NewModel(&githubtest.Fake{}, 0, 0), want: "enter open  ? help  esc quit"},
 		{name: "org model", model: org.NewModel(&githubtest.Fake{}, shared.OrgKey{Name: "demo"}, 80, 24), want: "filters"},
-		{name: "default help", model: &plainModel{}, want: "esc: back | ctrl+c: quit"},
+		{name: "default help", model: &plainModel{}, want: "esc back  ? help  ctrl+c quit"},
 	}
 
 	for _, tt := range tests {
@@ -438,7 +464,6 @@ func TestComputeLayout(t *testing.T) {
 	assert.GreaterOrEqual(t, layout.footerHeight, 1)
 	assert.Equal(t, layout.bodyHeight-2, layout.interiorHeight)
 	assert.Equal(t, 24, layout.bodyHeight+layout.footerHeight, "the top edge is part of the body")
-	assert.NotEmpty(t, layout.header)
 	assert.NotEmpty(t, layout.footer)
 }
 
@@ -447,8 +472,8 @@ func TestComputeLayout_NoHelpProvider(t *testing.T) {
 
 	layout := m.computeLayout(&plainModel{})
 
-	assert.Contains(t, ansi.Strip(layout.header), "reponark")
-	assert.Contains(t, ansi.Strip(layout.footer), "esc: back")
+	assert.Contains(t, ansi.Strip(m.renderTopEdge(&plainModel{}, layout.bodyWidth, layout.interiorHeight)), "reponark")
+	assert.Contains(t, ansi.Strip(layout.footer), "esc back")
 }
 
 func TestComputeLayout_ZeroSize(t *testing.T) {

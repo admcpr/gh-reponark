@@ -1,55 +1,41 @@
 package user
 
 import (
-	"fmt"
 	"sort"
 
 	"gh-reponark/github"
 	"gh-reponark/shared"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // userLoadedMsg carries the authenticated user once the API call completes.
 type userLoadedMsg github.User
 
 type Model struct {
-	svc     github.Service
-	login   string
-	orgList list.Model
-	width   int
-	height  int
-	keymap  userKeyMap
+	svc   github.Service
+	login string
+	// items are the accounts to pick from: the user first, then their
+	// organizations. cursor is the selected one and offset the first row
+	// scrolled into view.
+	items  []shared.ListItem
+	cursor int
+	offset int
+	width  int
+	height int
+	keymap userKeyMap
 }
 
 func NewModel(svc github.Service, width, height int) *Model {
-	keymap := newUserKeyMap()
-
-	list := list.New([]list.Item{}, shared.DefaultDelegate, width, height)
-	list.SetStatusBarItemName("Organization", "Organizations")
-	list.Styles.Title = shared.TitleStyle
-	list.SetShowTitle(false)
-	list.SetShowHelp(false)
-	list.SetShowStatusBar(false)
-	// The list moves with the same bindings the help footer advertises.
-	list.KeyMap.CursorUp = keymap.Up
-	list.KeyMap.CursorDown = keymap.Down
-	// The screen handles enter and esc itself, so the list's own filter
-	// prompt could not be confirmed or cancelled, and its quit and help keys
-	// would compete with the app's. Switch them all off.
-	list.SetFilteringEnabled(false)
-	for _, binding := range []*key.Binding{&list.KeyMap.Filter, &list.KeyMap.Quit, &list.KeyMap.ForceQuit, &list.KeyMap.ShowFullHelp, &list.KeyMap.CloseFullHelp} {
-		binding.SetEnabled(false)
-	}
-
-	return &Model{svc: svc, orgList: list, width: width, height: height, keymap: keymap}
+	return &Model{svc: svc, width: width, height: height, keymap: newUserKeyMap()}
 }
 
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
+	m.scrollToCursor()
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -68,7 +54,7 @@ func (m *Model) loadUser() tea.Msg {
 // SetUser populates the list with the user followed by their organizations.
 func (m *Model) SetUser(user github.User) {
 	m.login = user.Login
-	items := make([]list.Item, len(user.Organizations))
+	items := make([]shared.ListItem, len(user.Organizations))
 	for i, org := range user.Organizations {
 		items[i] = shared.NewListItem(org.Login, org.Url)
 	}
@@ -80,22 +66,46 @@ func (m *Model) SetUser(user github.User) {
 	// Add the user to the top of the list
 	// They're not an organization but they also have repositories
 	userItem := shared.NewListItem(m.login, user.Url)
-	items = append([]list.Item{userItem}, items...)
-	m.orgList.SetItems(items)
+	m.items = append([]shared.ListItem{userItem}, items...)
+	m.moveCursor(0)
 }
 
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+// selected returns the highlighted account, if there is one.
+func (m *Model) selected() (shared.ListItem, bool) {
+	if m.cursor < 0 || m.cursor >= len(m.items) {
+		return shared.ListItem{}, false
+	}
+	return m.items[m.cursor], true
+}
 
+// moveCursor selects the account delta rows away, stopping at either end.
+func (m *Model) moveCursor(delta int) {
+	if len(m.items) == 0 {
+		return
+	}
+	m.cursor = shared.Max(0, shared.Min(m.cursor+delta, len(m.items)-1))
+	m.scrollToCursor()
+}
+
+func (m *Model) scrollToCursor() {
+	m.offset = shared.ScrollOffset(m.offset, m.cursor, m.rows(), len(m.items))
+}
+
+// pickerChrome is the heading line above the rows.
+const pickerChrome = 1
+
+// rows is how many accounts are shown at once.
+func (m *Model) rows() int { return shared.Max(1, m.height-pickerChrome) }
+
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case userLoadedMsg:
 		m.SetUser(github.User(msg))
-		return m, nil
 
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.keymap.Select):
-			item, ok := m.orgList.SelectedItem().(shared.ListItem)
+			item, ok := m.selected()
 			if !ok {
 				return m, nil
 			}
@@ -109,19 +119,56 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case key.Matches(msg, m.keymap.Back):
 			return m, func() tea.Msg { return shared.PreviousMsg{} }
+		case key.Matches(msg, m.keymap.Up):
+			m.moveCursor(-1)
+		case key.Matches(msg, m.keymap.Down):
+			m.moveCursor(1)
+		case key.Matches(msg, m.keymap.PageUp):
+			m.moveCursor(-m.rows())
+		case key.Matches(msg, m.keymap.PageDown):
+			m.moveCursor(m.rows())
+		case key.Matches(msg, m.keymap.Top):
+			m.moveCursor(-len(m.items))
+		case key.Matches(msg, m.keymap.Bottom):
+			m.moveCursor(len(m.items))
 		}
 	}
-
-	m.orgList, cmd = m.orgList.Update(msg)
-
-	return m, cmd
+	return m, nil
 }
 
 func (m Model) View() tea.View {
-	m.orgList.SetWidth(m.width)
-	m.orgList.SetHeight(shared.Max(1, m.height))
+	width, height := shared.Max(1, m.width), shared.Max(1, m.height)
+	rows := m.rows()
 
-	return tea.NewView(fmt.Sprint(shared.AppStyle.Width(m.width).Render(m.orgList.View())))
+	nameWidth := 0
+	for _, item := range m.items {
+		nameWidth = shared.Max(nameWidth, lipgloss.Width(item.Title()))
+	}
+	nameWidth = shared.Min(nameWidth, shared.Half(width))
+
+	lines := []string{shared.ColumnHeading.Render(shared.Fit("    ACCOUNT", width))}
+	// The pane may have been resized since the cursor last moved.
+	offset := shared.ScrollOffset(m.offset, m.cursor, rows, len(m.items))
+	for i := offset; i < len(m.items) && i < offset+rows; i++ {
+		lines = append(lines, m.row(m.items[i], i == m.cursor, nameWidth, width))
+	}
+	return tea.NewView(shared.Lines(lines, width, height))
+}
+
+// row is one account: the accent marker and a full-width band on the
+// selected one, the login in bold and its URL in the link colour, dimmed on
+// the rows that are not selected.
+func (m Model) row(item shared.ListItem, selected bool, nameWidth, width int) string {
+	marker, name, url := "  ", shared.TextBodyStyle, shared.DimStyle
+	if selected {
+		marker = shared.AccentStyle.Render("▌ ")
+		name, url = shared.StrongStyle, shared.LinkTextStyle
+	}
+	row := marker + "  " + name.Render(shared.Fit(item.Title(), nameWidth)) + "  " + url.Render(item.Description())
+	if selected {
+		return shared.HighlightRow(row, width, true)
+	}
+	return shared.Fit(row, width)
 }
 
 // Status says who is signed in. The screen adds nothing to the breadcrumb:
@@ -133,10 +180,10 @@ func (m Model) Status() string {
 	return "signed in as " + m.login
 }
 
-// Help lists the picker's keys, including the paging keys the list handles.
+// Help lists the picker's keys, including the paging keys.
 func (m Model) Help() shared.Help {
-	pages := shared.Combine("←/→", "page", m.orgList.KeyMap.PrevPage, m.orgList.KeyMap.NextPage)
-	ends := shared.Combine("g/G", "first/last", m.orgList.KeyMap.GoToStart, m.orgList.KeyMap.GoToEnd)
+	pages := shared.Combine("←/→", "page", m.keymap.PageUp, m.keymap.PageDown)
+	ends := shared.Combine("g/G", "first/last", m.keymap.Top, m.keymap.Bottom)
 	return shared.Help{
 		Short: []key.Binding{
 			shared.Combine("j/k", "org", m.keymap.Down, m.keymap.Up),
@@ -153,10 +200,14 @@ func (m Model) Help() shared.Help {
 // userKeyMap holds the bindings for the organization picker. Update matches
 // against these and the help footer renders them.
 type userKeyMap struct {
-	Up     key.Binding
-	Down   key.Binding
-	Select key.Binding
-	Back   key.Binding
+	Up       key.Binding
+	Down     key.Binding
+	PageUp   key.Binding
+	PageDown key.Binding
+	Top      key.Binding
+	Bottom   key.Binding
+	Select   key.Binding
+	Back     key.Binding
 }
 
 func newUserKeyMap() userKeyMap {
@@ -168,6 +219,23 @@ func newUserKeyMap() userKeyMap {
 		Down: key.NewBinding(
 			key.WithKeys("down", "j"),
 			key.WithHelp("↓/j", "down"),
+		),
+		// The paging keys are the ones the list component used to answer to.
+		PageUp: key.NewBinding(
+			key.WithKeys("left", "h", "pgup", "b", "u"),
+			key.WithHelp("←/h/pgup", "page up"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("right", "l", "pgdown", "f", "d"),
+			key.WithHelp("→/l/pgdn", "page down"),
+		),
+		Top: key.NewBinding(
+			key.WithKeys("home", "g"),
+			key.WithHelp("g/home", "first"),
+		),
+		Bottom: key.NewBinding(
+			key.WithKeys("end", "G"),
+			key.WithHelp("G/end", "last"),
 		),
 		Select: key.NewBinding(
 			key.WithKeys("enter"),

@@ -20,6 +20,9 @@ var quitKey = key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "qui
 // helpKey shows or hides every key the current screen handles.
 var helpKey = key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help"))
 
+// backKey is advertised for screens that describe no keys of their own.
+var backKey = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back"))
+
 type MainModel struct {
 	svc    github.Service
 	nav    shared.Navigator
@@ -112,18 +115,30 @@ func (m MainModel) View() tea.View {
 		MaxHeight(layout.interiorHeight).
 		Render(childView)
 
-	// The top edge is drawn separately so it can carry the breadcrumb.
+	// The top edge is drawn separately so it can carry the breadcrumb. The
+	// gradient travels around the whole frame, so the top edge is coloured
+	// from the same ramp Lip Gloss uses for the other three sides. Width
+	// and Height here include the border, so the body is bodyHeight-1 lines
+	// (no top edge) around interiorHeight lines of content. Lip Gloss lays
+	// its perimeter gradient out from the frame width and that content
+	// height whether or not the top edge is drawn, so renderTopEdge takes
+	// the top edge's share from a gradient of the same size.
 	body := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, true, true).
-		BorderForeground(shared.AppColors.Blue).
+		BorderForegroundBlend(shared.FrameGradient(true)...).
 		Width(layout.bodyWidth).
 		Height(layout.bodyHeight - 1).
 		Render(lipgloss.Place(layout.interiorWidth, layout.interiorHeight, lipgloss.Left, lipgloss.Top, cappedChild))
+	header := m.renderTopEdge(child, layout.bodyWidth, layout.interiorHeight)
 
-	stacked := lipgloss.JoinVertical(lipgloss.Left, layout.header, body, layout.footer)
+	stacked := lipgloss.JoinVertical(lipgloss.Left, header, body, layout.footer)
 	framed := lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, stacked)
 	v := tea.NewView(framed)
 	v.AltScreen = true
+	// Paint the terminal in the palette's own base so the colours sit on the
+	// background they were chosen for rather than whatever theme is running.
+	v.BackgroundColor = shared.AppColors.Background
+	v.ForegroundColor = shared.AppColors.Foreground
 	return v
 }
 
@@ -186,8 +201,10 @@ func (m MainModel) breadcrumb() []string {
 //	┌─ reponark › acme-corp › Filters ──────────── 37 of 148 repos ─┐
 //
 // When space runs short the status goes first, then the oldest crumbs.
-func (m MainModel) renderTopEdge(model tea.Model, width int) string {
-	border := lipgloss.NewStyle().Foreground(shared.AppColors.Blue)
+// The rule is coloured cell by cell from the perimeter gradient of a frame
+// with interiorHeight lines of content, so it continues the blend Lip Gloss
+// draws around the rest of the frame.
+func (m MainModel) renderTopEdge(model tea.Model, width, interiorHeight int) string {
 	separator := shared.DimStyle.Render(" › ")
 
 	status := ""
@@ -220,7 +237,12 @@ func (m MainModel) renderTopEdge(model tea.Model, width int) string {
 	}
 
 	fill := shared.Max(0, width-lipgloss.Width(title)-lipgloss.Width(status)-4)
-	edge := border.Render("┌─") + title + border.Render(strings.Repeat("─", fill)) + status + border.Render("─┐")
+	gradient := shared.PerimeterGradient(width, interiorHeight)
+	at := func(s string, from int) string {
+		return shared.GradientRun(s, gradient[shared.Min(from, len(gradient)-1):])
+	}
+	ruleAt := 2 + lipgloss.Width(title)
+	edge := at("┌─", 0) + title + at(strings.Repeat("─", fill), ruleAt) + status + at("─┐", width-2)
 	return shared.Fit(edge, width)
 }
 
@@ -239,15 +261,15 @@ func (m MainModel) typing() bool {
 // just before its last entry, which is how to leave; the full view adds a
 // column of keys that work everywhere.
 func (m MainModel) renderFooter(model tea.Model) string {
-	footerStyle := shared.LayoutFooterStyle
+	footerStyle := shared.FooterStyle
 
+	// A screen with nothing to say about its keys still gets the two that
+	// work everywhere, drawn the same way as every other footer.
+	keys := shared.Help{Short: []key.Binding{backKey, quitKey}}
 	hp, ok := model.(shared.HelpProvider)
-	if !ok {
-		return footerStyle.Foreground(shared.AppColors.BrightBlack).
-			Render("esc: back | ctrl+c: quit")
+	if ok {
+		keys = hp.Help()
 	}
-
-	keys := hp.Help()
 	typing := m.typing()
 	if !typing && len(keys.Short) > 0 {
 		last := len(keys.Short) - 1
@@ -268,7 +290,6 @@ func (m MainModel) renderFooter(model tea.Model) string {
 }
 
 type layoutParts struct {
-	header         string
 	footer         string
 	footerHeight   int
 	bodyWidth      int
@@ -295,7 +316,6 @@ func (m MainModel) computeLayout(child tea.Model) layoutParts {
 	bodyHeight := shared.Max(3, m.height-footerHeight)
 
 	return layoutParts{
-		header:         m.renderTopEdge(child, bodyWidth),
 		footer:         footer,
 		footerHeight:   footerHeight,
 		bodyWidth:      bodyWidth,

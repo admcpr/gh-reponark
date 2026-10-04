@@ -275,12 +275,12 @@ func TestModel_View(t *testing.T) {
 
 	content := plain(m.View())
 
-	assert.Contains(t, content, " Is Archived: no ", "active filters are chips")
-	assert.Contains(t, content, "Status ───", "properties are grouped")
-	assert.Contains(t, content, "● Is Archived   yes / no ", "the editor names the property and its type")
+	assert.Contains(t, content, "▐Is Archived: no▌", "active filters are chips")
+	assert.Contains(t, content, "STATUS", "properties are grouped under column headings")
+	assert.Contains(t, content, "● Is Archived ▐toggle▌", "the editor names the property and its type")
 	assert.Contains(t, content, "Indicates if the repository is archived.")
-	assert.Contains(t, content, "any     yes     no")
-	assert.Contains(t, content, "● yes 1   ● no 2", "the chart describes the loaded repos")
+	assert.Contains(t, content, "▐any▌ ▐yes▌ ▐no▌", "the choices are a segmented control")
+	assert.Contains(t, content, "● yes 1   ○ no 2", "the chart describes the loaded repos")
 	assert.Contains(t, content, "2 of 3", "matching repos are counted")
 	assert.Contains(t, content, "● new  ● busy", "and listed")
 }
@@ -307,7 +307,7 @@ func TestModel_Charts(t *testing.T) {
 		query string
 		want  []string
 	}{
-		{query: "is archived", want: []string{"● yes 1   ● no 2"}},
+		{query: "is archived", want: []string{"● yes 1   ○ no 2"}},
 		{query: "stargazer", want: []string{"3", "900", "median 40"}},
 		{query: "language", want: []string{"Go", "Ruby"}},
 		{query: "pushed", want: []string{"No repos have this date set"}},
@@ -333,7 +333,7 @@ func TestTextChart(t *testing.T) {
 	assert.Len(t, lines, 2)
 	assert.True(t, strings.HasPrefix(ansi.Strip(lines[0]), "Go "), "the most common value comes first")
 	assert.True(t, strings.HasSuffix(ansi.Strip(lines[0]), " 2"))
-	assert.Less(t, strings.Count(lines[1], "█"), strings.Count(lines[0], "█"), "bars are proportional")
+	assert.Less(t, strings.Count(lines[1], "━"), strings.Count(lines[0], "━"), "bars are proportional")
 
 	assert.Equal(t, []string{"Every repo has a different value"}, stripAll(textChart(testRepos(), "Name", 40)))
 }
@@ -350,9 +350,9 @@ func TestMatchingNames(t *testing.T) {
 func TestModel_View_WithoutRepos(t *testing.T) {
 	content := plain(NewModel(nil, nil, 100, 30).View())
 
-	assert.Contains(t, content, "Filter ")
-	assert.NotContains(t, content, "Across your repos", "there is nothing to chart")
-	assert.NotContains(t, content, "Matching")
+	assert.Contains(t, content, "FILTER ")
+	assert.NotContains(t, content, "ACROSS YOUR REPOS", "there is nothing to chart")
+	assert.NotContains(t, content, "MATCHING")
 }
 
 func stripAll(lines []string) []string {

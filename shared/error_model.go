@@ -51,10 +51,14 @@ func (m *ErrorModel) View() tea.View {
 		message = m.err.Error()
 	}
 
-	title := ErrorStyle.Render("Something went wrong")
-	body := TextStyle.Width(Max(1, m.width-2)).Render(message)
+	// The same vocabulary as every other screen: a semantic pill for the
+	// state, body text for what happened and a dim hint for the way out.
+	width := Max(1, m.width)
+	title := Pill("Error", AppColors.Bad) + " " + StrongStyle.Render("Something went wrong")
+	body := TextBodyStyle.Width(width).Render(message)
+	hint := DimStyle.Render("Press esc to go back.")
 
-	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, title, "", body)))
+	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Left, title, "", body, "", hint)))
 }
 
 func (m *ErrorModel) Breadcrumb() string {
