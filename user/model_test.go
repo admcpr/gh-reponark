@@ -3,13 +3,16 @@ package user
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"gh-reponark/github"
 	"gh-reponark/github/githubtest"
 	"gh-reponark/shared"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 )
@@ -38,7 +41,7 @@ func newTestModel() *Model {
 func itemTitles(m *Model) []string {
 	titles := make([]string, len(m.items))
 	for i, item := range m.items {
-		titles[i] = item.Title()
+		titles[i] = item.login
 	}
 	return titles
 }
@@ -93,7 +96,9 @@ func TestModel_SetUser(t *testing.T) {
 	assert.Equal(t, []string{"octocat", "alpha", "mike", "zulu"}, itemTitles(m),
 		"the user should be first followed by organisations sorted by login")
 
-	assert.Equal(t, "https://github.com/octocat", m.items[0].Description())
+	assert.Equal(t, "https://github.com/octocat", m.items[0].url)
+	assert.True(t, m.items[0].isUser, "the first card is the signed-in user")
+	assert.False(t, m.items[1].isUser)
 }
 
 func TestModel_SetUser_NoOrganizations(t *testing.T) {
@@ -171,8 +176,11 @@ func TestModel_Update_ArrowsMoveTheCursor(t *testing.T) {
 }
 
 func TestModel_Update_PagingKeys(t *testing.T) {
-	m := NewModel(&githubtest.Fake{}, 80, 4) // three rows under the heading
+	// Ten lines is the short tier: three two-line cards and the blank lines
+	// between them fit under the heading.
+	m := NewModel(&githubtest.Fake{}, 80, 10)
 	m.SetUser(newTestUser("octocat", "a", "b", "c", "d", "e", "f"))
+	assert.Equal(t, 3, m.rows())
 
 	m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	assert.Equal(t, 3, m.cursor, "page down moves a screenful")
@@ -183,7 +191,7 @@ func TestModel_Update_PagingKeys(t *testing.T) {
 	assert.Equal(t, 4, m.offset)
 	content := plain(m.View())
 	assert.Contains(t, content, "f")
-	assert.NotContains(t, content, "octocat", "rows scrolled off the top are hidden")
+	assert.NotContains(t, content, "octocat", "cards scrolled off the top are hidden")
 
 	m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	assert.Equal(t, 3, m.cursor)
@@ -194,14 +202,31 @@ func TestModel_Update_PagingKeys(t *testing.T) {
 }
 
 func TestModel_SetDimensions_KeepsCursorInView(t *testing.T) {
-	m := NewModel(&githubtest.Fake{}, 80, 10)
+	m := NewModel(&githubtest.Fake{}, 80, 40) // eight four-line cards
 	m.SetUser(newTestUser("octocat", "a", "b", "c", "d", "e", "f"))
 	m.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
-	assert.Equal(t, 0, m.offset, "everything fits at ten rows")
+	assert.Equal(t, 0, m.offset, "everything fits at forty rows")
 
-	m.SetDimensions(80, 4)
+	m.SetDimensions(80, 10) // three two-line cards
 
 	assert.Equal(t, 4, m.offset, "a shorter pane scrolls to the cursor")
+}
+
+func TestModel_Rows_ByTier(t *testing.T) {
+	tests := []struct {
+		width, height, want int
+	}{
+		{120, 36, 7}, // four-line cards and a blank line each: 36 lines hold seven
+		{120, 16, 3}, // the smallest full-height pane
+		{120, 15, 5}, // the short tier: two-line cards
+		{40, 36, 9},  // narrow: no URL line, three-line cards
+		{40, 8, 2},   // narrow and short
+		{120, 1, 1},  // never fewer than one card
+	}
+	for _, tt := range tests {
+		m := NewModel(&githubtest.Fake{}, tt.width, tt.height)
+		assert.Equal(t, tt.want, m.rows(), "%dx%d", tt.width, tt.height)
+	}
 }
 
 func TestModel_Update_NonKeyMessagesAreIgnored(t *testing.T) {
@@ -221,8 +246,118 @@ func TestModel_View(t *testing.T) {
 
 	content := plain(m.View())
 
+	assert.Contains(t, content, "ACCOUNTS")
+	assert.Contains(t, content, "1 organisation")
 	assert.Contains(t, content, "octocat")
 	assert.Contains(t, content, "acme")
+	assert.Contains(t, content, "you")
+	assert.Contains(t, content, "org")
+	assert.Contains(t, content, "https://github.com/acme")
+	assert.Contains(t, content, "No description")
+}
+
+func TestModel_View_SigningIn(t *testing.T) {
+	m := newTestModel()
+
+	content := plain(m.View())
+
+	assert.Contains(t, content, "Signing in…")
+	assert.NotContains(t, content, "ACCOUNTS")
+}
+
+// newRichUser is a user with a named, described organization so the cards
+// have something to show on every line.
+func newRichUser() github.User {
+	user := newTestUser("octocat")
+	user.Name = "The Octocat"
+	user.Description = "Mascot"
+	user.Repositories = 8
+	user.PublicRepositories = 6
+	user.Members = 9000
+	user.CreatedAt = time.Date(2011, 1, 25, 0, 0, 0, 0, time.UTC)
+	user.Organizations = []github.Organization{{
+		Login:               "acme",
+		Name:                "Acme Robotics",
+		Description:         "Anvils  and\nrockets",
+		Url:                 "https://github.com/acme",
+		Repositories:        1204,
+		PublicRepositories:  1000,
+		Members:             18,
+		ViewerCanAdminister: true,
+		IsVerified:          true,
+		CreatedAt:           time.Date(2015, 3, 4, 0, 0, 0, 0, time.UTC),
+	}}
+	return user
+}
+
+func TestModel_View_Cards(t *testing.T) {
+	m := NewModel(&githubtest.Fake{}, 120, 36)
+	m.SetUser(newRichUser())
+
+	lines := strings.Split(plain(m.View()), "\n")
+
+	assert.Equal(t, "  ACCOUNTS  ▐1 organisation▌", strings.TrimRight(lines[0], " "))
+	// The user's card: monogram, name and login, the you pill.
+	assert.Equal(t, "▌ O  The Octocat  octocat  ▐you▌", strings.TrimRight(lines[1], " "))
+	assert.Equal(t, "▌    Mascot", strings.TrimRight(lines[2], " "))
+	assert.Equal(t, "▌    8 repos · 6 public · 2 private · 9k followers · since 2011", strings.TrimRight(lines[3], " "))
+	assert.Equal(t, "▌    https://github.com/octocat", strings.TrimRight(lines[4], " "))
+	assert.Equal(t, "", strings.TrimRight(lines[5], " "), "a blank line separates the cards")
+	// The organization's card: whitespace in the description is collapsed.
+	assert.Equal(t, "  A  Acme Robotics  acme  ▐org▌ ▐admin▌ ▐verified▌", strings.TrimRight(lines[6], " "))
+	assert.Equal(t, "     Anvils and rockets", strings.TrimRight(lines[7], " "))
+	assert.Equal(t, "     1.2k repos · 1k public · 204 private · 18 members · since 2015", strings.TrimRight(lines[8], " "))
+	assert.Equal(t, "     https://github.com/acme", strings.TrimRight(lines[9], " "))
+}
+
+func TestModel_View_ShortTier(t *testing.T) {
+	m := NewModel(&githubtest.Fake{}, 120, 12)
+	m.SetUser(newRichUser())
+
+	lines := strings.Split(plain(m.View()), "\n")
+
+	assert.Equal(t, "▌ O  The Octocat  octocat  ▐you▌", strings.TrimRight(lines[1], " "))
+	assert.Equal(t, "▌    8 repos · 6 public · 2 private · 9k followers · since 2011", strings.TrimRight(lines[2], " "))
+	assert.Equal(t, "", strings.TrimRight(lines[3], " "))
+	assert.Equal(t, "  A  Acme Robotics  acme  ▐org▌ ▐admin▌ ▐verified▌", strings.TrimRight(lines[4], " "))
+	assert.NotContains(t, plain(m.View()), "https://", "short cards drop the URL and description")
+}
+
+func TestModel_View_NarrowTier(t *testing.T) {
+	m := NewModel(&githubtest.Fake{}, 44, 36)
+	m.SetUser(newRichUser())
+
+	content := plain(m.View())
+	lines := strings.Split(content, "\n")
+
+	assert.Equal(t, "▌ The Octocat  octocat  ▐you▌", strings.TrimRight(lines[1], " "), "no monogram when narrow")
+	assert.Equal(t, "▌ Mascot", strings.TrimRight(lines[2], " "))
+	assert.Equal(t, "▌ 8 repos · 6 public · 2 private", strings.TrimRight(lines[3], " "), "facts are shed from the end")
+	assert.Equal(t, "", strings.TrimRight(lines[4], " "), "and there is no URL line")
+	assert.Equal(t, "  Acme Robotics  ▐org▌ ▐admin▌ ▐verified▌", strings.TrimRight(lines[5], " "),
+		"the login is dropped whole before the name is cut")
+	assert.NotContains(t, content, "https://")
+	for _, line := range lines {
+		assert.LessOrEqual(t, lipgloss.Width(line), 44)
+	}
+}
+
+func TestModel_View_PillsAreNeverCut(t *testing.T) {
+	m := NewModel(&githubtest.Fake{}, 36, 36)
+	user := newRichUser()
+	user.Organizations[0].Name = "An organisation with a very long name indeed"
+	m.SetUser(user)
+
+	lines := strings.Split(plain(m.View()), "\n")
+
+	assert.Equal(t, "  An orga…  ▐org▌ ▐admin▌ ▐verified▌", strings.TrimRight(lines[5], " "))
+}
+
+func TestMonogram(t *testing.T) {
+	assert.Equal(t, "O ", ansi.Strip(monogram("octocat")))
+	assert.Equal(t, "Ü ", ansi.Strip(monogram("über")))
+	assert.Equal(t, "? ", ansi.Strip(monogram("")))
+	assert.Equal(t, monogram("acme"), monogram("acme"), "the colour is stable")
 }
 
 func TestModel_View_ZeroHeight(t *testing.T) {

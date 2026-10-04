@@ -2,7 +2,11 @@
 // behind a small interface so the UI can be exercised without the network.
 package github
 
-import "gh-reponark/repo"
+import (
+	"time"
+
+	"gh-reponark/repo"
+)
 
 // RepositoryBatchSize is the most repositories a caller should ask
 // GetRepositories for at once. Every repository's configuration includes
@@ -31,15 +35,40 @@ type Service interface {
 
 // User is the authenticated GitHub user.
 type User struct {
-	Login         string
-	Url           string
+	Login string
+	// Name is the display name, which may be empty.
+	Name string
+	// Description is the profile bio.
+	Description string
+	Url         string
+	// Repositories counts every repository the user owns and
+	// PublicRepositories the public ones among them.
+	Repositories       int
+	PublicRepositories int
+	// Members is the follower count: the nearest thing a user has to an
+	// organization's membership.
+	Members       int
+	CreatedAt     time.Time
 	Organizations []Organization
 }
 
 // Organization is an organization the authenticated user belongs to.
 type Organization struct {
-	Login string
-	Url   string
+	Login       string
+	Name        string
+	Description string
+	Url         string
+	// Repositories counts every repository the organization owns and
+	// PublicRepositories the public ones among them.
+	Repositories       int
+	PublicRepositories int
+	// Members counts the organization's members.
+	Members int
+	// ViewerCanAdminister is true when the signed-in user is an owner.
+	ViewerCanAdminister bool
+	// IsVerified is true when GitHub has verified the organization's domains.
+	IsVerified bool
+	CreatedAt  time.Time
 }
 
 // RepositoryRef identifies a repository without its configuration.

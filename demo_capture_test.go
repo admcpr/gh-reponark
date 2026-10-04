@@ -126,6 +126,9 @@ func TestCapture(t *testing.T) {
 		c.drive(c.m.Init(), 0)
 
 		c.snap("picker")
+		c.press("j", "j")
+		c.snap("picker-third")
+		c.press("g")
 
 		// Open the user's repositories and wait for them to load.
 		c.press("enter")
@@ -193,5 +196,22 @@ func TestCapture(t *testing.T) {
 		e.send(tea.WindowSizeMsg{Width: width, Height: height})
 		e.drive(e.m.Init(), 0)
 		e.snap("error")
+	}
+
+	// Small terminals show the picker's degraded tiers: 80x20 still fits
+	// four-line cards but scrolls, 80x16 drops to two-line cards and 48x24
+	// loses the monogram and URL.
+	for _, small := range []struct {
+		width, height int
+		name          string
+	}{{80, 20, "picker-small"}, {80, 16, "picker-short"}, {48, 24, "picker-narrow"}} {
+		s := &capture{t: t, m: NewMainModel(demoService()), dir: dir, prefix: fmt.Sprintf("%dx%d", small.width, small.height)}
+		s.send(tea.WindowSizeMsg{Width: small.width, Height: small.height})
+		// The runtime renders after every message, and rendering is what
+		// passes the new size down to the screen.
+		s.m.View()
+		s.drive(s.m.Init(), 0)
+		s.press("j")
+		s.snap(small.name)
 	}
 }

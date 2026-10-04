@@ -15,12 +15,61 @@ import (
 func demoService() *githubtest.Fake {
 	return &githubtest.Fake{
 		User: github.User{
-			Login: "demo",
-			Url:   "https://github.com/demo",
+			Login:              "demo",
+			Name:               "Demo Account",
+			Description:        "Builds terminal tools and the occasional chess engine. Opinions are my own.",
+			Url:                "https://github.com/demo",
+			Repositories:       40,
+			PublicRepositories: 27,
+			Members:            318,
+			CreatedAt:          time.Date(2014, 6, 12, 9, 30, 0, 0, time.UTC),
 			Organizations: []github.Organization{
-				{Login: "acme-robotics", Url: "https://github.com/acme-robotics"},
-				{Login: "nightshade-labs", Url: "https://github.com/nightshade-labs"},
-				{Login: "open-tooling", Url: "https://github.com/open-tooling"},
+				{
+					// A verified organization the user administers.
+					Login:               "acme-robotics",
+					Name:                "Acme Robotics",
+					Description:         "Industrial automation, fleet telemetry and the firmware that keeps it all moving.",
+					Url:                 "https://github.com/acme-robotics",
+					Repositories:        312,
+					PublicRepositories:  64,
+					Members:             148,
+					ViewerCanAdminister: true,
+					IsVerified:          true,
+					CreatedAt:           time.Date(2016, 2, 3, 0, 0, 0, 0, time.UTC),
+				},
+				{
+					// A large organization the user merely belongs to.
+					Login:              "nightshade-labs",
+					Name:               "Nightshade Labs",
+					Description:        "Open research in distributed systems, storage engines and query planning. We publish everything we can.",
+					Url:                "https://github.com/nightshade-labs",
+					Repositories:       2481,
+					PublicRepositories: 2210,
+					Members:            3906,
+					IsVerified:         true,
+					CreatedAt:          time.Date(2012, 11, 20, 0, 0, 0, 0, time.UTC),
+				},
+				{
+					// A tiny organization with no display name.
+					Login:               "open-tooling",
+					Description:         "Shared CLI utilities.",
+					Url:                 "https://github.com/open-tooling",
+					Repositories:        3,
+					PublicRepositories:  3,
+					Members:             2,
+					ViewerCanAdminister: true,
+					CreatedAt:           time.Date(2024, 8, 1, 0, 0, 0, 0, time.UTC),
+				},
+				{
+					// An organization that has written nothing about itself.
+					Login:              "sandbox-collective",
+					Name:               "Sandbox Collective",
+					Url:                "https://github.com/sandbox-collective",
+					Repositories:       17,
+					PublicRepositories: 0,
+					Members:            9,
+					CreatedAt:          time.Date(2021, 4, 15, 0, 0, 0, 0, time.UTC),
+				},
 			},
 		},
 		Repositories: demoRepositories(),

@@ -60,9 +60,29 @@ func (c *Client) CurrentUser() (User, error) {
 		return User{}, fmt.Errorf("fetching user %s: %w", current.Login, err)
 	}
 
-	user := User{Login: query.User.Login, Url: query.User.Url}
+	user := User{
+		Login:              query.User.Login,
+		Name:               query.User.Name,
+		Description:        query.User.Bio,
+		Url:                query.User.Url,
+		Repositories:       query.User.Repositories.TotalCount,
+		PublicRepositories: query.User.PublicRepositories.TotalCount,
+		Members:            query.User.Followers.TotalCount,
+		CreatedAt:          query.User.CreatedAt,
+	}
 	for _, org := range query.User.Organizations.Nodes {
-		user.Organizations = append(user.Organizations, Organization{Login: org.Login, Url: org.Url})
+		user.Organizations = append(user.Organizations, Organization{
+			Login:               org.Login,
+			Name:                org.Name,
+			Description:         org.Description,
+			Url:                 org.Url,
+			Repositories:        org.Repositories.TotalCount,
+			PublicRepositories:  org.PublicRepositories.TotalCount,
+			Members:             org.MembersWithRole.TotalCount,
+			ViewerCanAdminister: org.ViewerCanAdminister,
+			IsVerified:          org.IsVerified,
+			CreatedAt:           org.CreatedAt,
+		})
 	}
 
 	return user, nil

@@ -46,10 +46,10 @@ func (f *fakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{
 		StatusCode: status,
 		// Real servers send the code and the text, e.g. "504 Gateway Timeout".
-		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(strings.NewReader(body)),
-		Request:    req,
+		Status:  fmt.Sprintf("%d %s", status, http.StatusText(status)),
+		Header:  http.Header{"Content-Type": []string{"application/json"}},
+		Body:    io.NopCloser(strings.NewReader(body)),
+		Request: req,
 	}, nil
 }
 
@@ -104,10 +104,21 @@ func TestClient_CurrentUser(t *testing.T) {
 		case isOperation(gql, "User"):
 			return http.StatusOK, `{"data":{"user":{
 				"login":"octocat",
+				"name":"The Octocat",
+				"bio":"Mascot",
 				"url":"https://github.com/octocat",
+				"createdAt":"2011-01-25T18:44:36Z",
+				"repositories":{"totalCount":8},
+				"publicRepositories":{"totalCount":6},
+				"followers":{"totalCount":9000},
 				"organizations":{"nodes":[
-					{"login":"acme","url":"https://github.com/acme"},
-					{"login":"globex","url":"https://github.com/globex"}
+					{"login":"acme","name":"Acme","description":"Anvils","url":"https://github.com/acme",
+					 "isVerified":true,"viewerCanAdminister":true,"createdAt":"2015-03-04T05:06:07Z",
+					 "repositories":{"totalCount":42},"publicRepositories":{"totalCount":30},
+					 "membersWithRole":{"totalCount":18}},
+					{"login":"globex","url":"https://github.com/globex",
+					 "repositories":{"totalCount":1},"publicRepositories":{"totalCount":0},
+					 "membersWithRole":{"totalCount":2}}
 				]}}}}`
 		default:
 			return http.StatusNotFound, `{"message":"unexpected request"}`
@@ -118,11 +129,22 @@ func TestClient_CurrentUser(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, User{
-		Login: "octocat",
-		Url:   "https://github.com/octocat",
+		Login:              "octocat",
+		Name:               "The Octocat",
+		Description:        "Mascot",
+		Url:                "https://github.com/octocat",
+		Repositories:       8,
+		PublicRepositories: 6,
+		Members:            9000,
+		CreatedAt:          time.Date(2011, 1, 25, 18, 44, 36, 0, time.UTC),
 		Organizations: []Organization{
-			{Login: "acme", Url: "https://github.com/acme"},
-			{Login: "globex", Url: "https://github.com/globex"},
+			{
+				Login: "acme", Name: "Acme", Description: "Anvils", Url: "https://github.com/acme",
+				Repositories: 42, PublicRepositories: 30, Members: 18,
+				ViewerCanAdminister: true, IsVerified: true,
+				CreatedAt: time.Date(2015, 3, 4, 5, 6, 7, 0, time.UTC),
+			},
+			{Login: "globex", Url: "https://github.com/globex", Repositories: 1, Members: 2},
 		},
 	}, user)
 
@@ -133,6 +155,9 @@ func TestClient_CurrentUser(t *testing.T) {
 	require.Len(t, transport.graphql, 1)
 	assert.Equal(t, "octocat", transport.graphql[0].Variables["login"])
 	assert.EqualValues(t, pageSize, transport.graphql[0].Variables["first"])
+	assert.Contains(t, transport.graphql[0].Query, "publicRepositories: repositories(privacy: PUBLIC){totalCount}",
+		"the public count is an aliased second repositories connection")
+	assert.Contains(t, transport.graphql[0].Query, "membersWithRole{totalCount}")
 }
 
 func TestClient_CurrentUser_NoOrganizations(t *testing.T) {
