@@ -2,13 +2,11 @@ package filters
 
 import (
 	"fmt"
-	"image/color"
-	"sort"
 	"strings"
-	"time"
 
+	"gh-reponark/filter"
 	"gh-reponark/repo"
-	"gh-reponark/shared"
+	"gh-reponark/ui"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
@@ -18,12 +16,12 @@ import (
 
 // FiltersMsg carries the filters chosen on the filter screen back to the
 // repository browser.
-type FiltersMsg FilterMap
+type FiltersMsg filter.FilterMap
 
 // OpenFiltersMsg asks the application to show the filter screen, seeded with
 // the filters that are currently applied and the repositories they apply to.
 type OpenFiltersMsg struct {
-	Filters FilterMap
+	Filters filter.FilterMap
 	Repos   []repo.RepoConfig
 }
 
@@ -31,20 +29,23 @@ type OpenFiltersMsg struct {
 // the filter on it, and an editor for the highlighted one on the right.
 // Edits apply as they are made so the match count stays current.
 type Model struct {
-	filters    FilterMap
+	filters    filter.FilterMap
 	repos      []repo.RepoConfig
 	properties []repo.PropertySchema
 
 	matches []int // indexes into properties that match the search
-	cursor  int   // index into matches
-	offset  int   // first visible line of the property list
+	// cursor is the highlighted match. The list scrolls by rendered line,
+	// headings included, rather than by match, so the cursor has no window
+	// of its own and the first visible line is kept in offset.
+	cursor ui.Cursor
+	offset int
 
 	search    textinput.Model
 	searching bool
 
 	editor  editor
 	editing bool
-	before  Filter // the filter when editing began, restored on cancel
+	before  filter.Filter // the filter when editing began, restored on cancel
 
 	keymap filterKeyMap
 	width  int
@@ -54,8 +55,8 @@ type Model struct {
 // NewModel creates the filter screen. current holds the filters already
 // applied; they are copied so edits only reach the caller via FiltersMsg.
 // repos are used to count matches and describe the values on offer.
-func NewModel(current FilterMap, repos []repo.RepoConfig, width, height int) *Model {
-	selected := make(FilterMap, len(current))
+func NewModel(current filter.FilterMap, repos []repo.RepoConfig, width, height int) *Model {
+	selected := make(filter.FilterMap, len(current))
 	for name, filter := range current {
 		selected[name] = filter
 	}
@@ -72,8 +73,8 @@ func NewModel(current FilterMap, repos []repo.RepoConfig, width, height int) *Mo
 	search := newInput("search properties", "")
 	search.Prompt = "/ "
 	styles := search.Styles()
-	styles.Focused.Prompt = shared.AccentStyle
-	styles.Blurred.Prompt = shared.AccentStyle
+	styles.Focused.Prompt = ui.AccentStyle
+	styles.Blurred.Prompt = ui.AccentStyle
 	search.SetStyles(styles)
 
 	m := &Model{
@@ -99,16 +100,16 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Filters returns the filters as currently edited.
-func (m *Model) Filters() FilterMap {
+func (m *Model) Filters() filter.FilterMap {
 	return m.filters
 }
 
 // selected returns the highlighted property, if any match the search.
 func (m *Model) selected() (repo.PropertySchema, bool) {
-	if m.cursor < 0 || m.cursor >= len(m.matches) {
+	if m.cursor.Index >= len(m.matches) {
 		return repo.PropertySchema{}, false
 	}
-	return m.properties[m.matches[m.cursor]], true
+	return m.properties[m.matches[m.cursor.Index]], true
 }
 
 // refreshMatches reapplies the search and keeps the highlight in range.
@@ -121,7 +122,7 @@ func (m *Model) refreshMatches() {
 			m.matches = append(m.matches, i)
 		}
 	}
-	m.cursor = shared.Max(0, shared.Min(m.cursor, len(m.matches)-1))
+	m.cursor.Resize(0, len(m.matches))
 	m.selectionChanged()
 }
 
@@ -134,16 +135,14 @@ func (m *Model) selectionChanged() {
 	}
 }
 
+// moveCursor highlights the match delta places away, stopping at either end.
 func (m *Model) moveCursor(delta int) {
-	if len(m.matches) == 0 {
-		return
-	}
-	m.cursor = shared.Max(0, shared.Min(m.cursor+delta, len(m.matches)-1))
+	m.cursor.Move(delta)
 	m.selectionChanged()
 }
 
 // setFilter applies f to the highlighted property; nil removes its filter.
-func (m *Model) setFilter(f Filter) {
+func (m *Model) setFilter(f filter.Filter) {
 	p, ok := m.selected()
 	if !ok {
 		return
@@ -191,7 +190,7 @@ func (m *Model) updateSearch(msg tea.Msg) tea.Cmd {
 	}
 	var cmd tea.Cmd
 	m.search, cmd = m.search.Update(msg)
-	m.cursor = 0
+	m.cursor.Set(0)
 	m.refreshMatches()
 	return cmd
 }
@@ -223,7 +222,7 @@ func (m *Model) updateList(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, m.keymap.Back):
 		return func() tea.Msg {
-			return shared.PreviousMsg{Message: FiltersMsg(m.filters)}
+			return ui.PreviousMsg{Message: FiltersMsg(m.filters)}
 		}
 	case key.Matches(msg, m.keymap.Up):
 		m.moveCursor(-1)
@@ -237,7 +236,7 @@ func (m *Model) updateList(msg tea.KeyPressMsg) tea.Cmd {
 		m.searching = true
 		return m.search.Focus()
 	case key.Matches(msg, m.keymap.ClearAll):
-		m.filters = FilterMap{}
+		m.filters = filter.FilterMap{}
 		m.selectionChanged()
 	case m.editor == nil:
 		return nil
@@ -260,341 +259,13 @@ func (m *Model) updateList(msg tea.KeyPressMsg) tea.Cmd {
 
 // ---- view
 
-// propertyType is how each kind of property is marked: a glyph beside it in
-// the list, coloured the way the inspector colours that kind of value, and
-// the same type pill as the inspector's footer card in the editor.
-type propertyType struct {
-	glyph string
-	color color.Color
-}
-
-func typeOf(t string) propertyType {
-	switch t {
-	case "bool":
-		return propertyType{"●", shared.AppColors.Good}
-	case "int":
-		return propertyType{"#", shared.AppColors.Link}
-	case "time.Time":
-		return propertyType{"◆", shared.AppColors.Purple}
-	default:
-		return propertyType{"¶", shared.AppColors.Dim}
-	}
-}
-
-func (t propertyType) Glyph() string {
-	return lipgloss.NewStyle().Foreground(t.color).Render(t.glyph)
-}
-
-// listChrome is the number of lines above the property list: the search
-// line and the active filters.
-const listChrome = 2
-
-func (m *Model) listWidth() int {
-	return shared.Max(30, shared.Min(44, m.width*2/5))
-}
-
-// editorWidth leaves a gap either side of the divider and one before the
-// frame, so rules and counts do not run into the border.
-func (m *Model) editorWidth() int { return shared.Max(1, m.width-m.listWidth()-4) }
-
 func (m *Model) View() tea.View {
-	list := shared.Lines(m.listLines(), m.listWidth(), m.height)
-	rule := shared.DimStyle.Render("│")
+	list := ui.Lines(m.listLines(), m.listWidth(), m.height)
+	rule := ui.DimStyle.Render("│")
 	divider := strings.TrimSuffix(strings.Repeat(rule+"\n", m.height), "\n")
-	editor := shared.Lines(m.editorLines(), m.editorWidth(), m.height)
+	editor := ui.Lines(m.editorLines(), m.editorWidth(), m.height)
 	gap := strings.TrimSuffix(strings.Repeat(" \n", m.height), "\n")
 	return tea.NewView(lipgloss.JoinHorizontal(lipgloss.Top, list, gap, divider, gap, editor, gap))
-}
-
-func (m *Model) listLines() []string {
-	width := m.listWidth()
-
-	var search string
-	switch {
-	case m.searching:
-		search = m.search.View()
-	case m.search.Value() != "":
-		search = shared.AccentStyle.Render("/ ") + shared.ValueStyle.Render(m.search.Value())
-	default:
-		search = shared.AccentStyle.Render("/") + shared.DimStyle.Render(" search properties")
-	}
-	lines := []string{search, m.chips(width)}
-
-	// Lay out the matching properties under their group headings, noting
-	// which line the highlight is on so the list can scroll to it.
-	var rows []string
-	cursorLine, group := 0, ""
-	for i, index := range m.matches {
-		p := m.properties[index]
-		if p.Group != group {
-			group = p.Group
-			rows = append(rows, headingLabel(repo.GroupTitle(group)))
-		}
-		if i == m.cursor {
-			cursorLine = len(rows)
-		}
-		rows = append(rows, m.propertyRow(p, i == m.cursor, width))
-	}
-	if len(rows) == 0 {
-		rows = append(rows, shared.TextBodyStyle.Render("No properties match your search"))
-	}
-
-	visible := shared.Max(1, m.height-listChrome)
-	// Keep the group heading above the first property in view.
-	target := cursorLine
-	if m.cursor == 0 {
-		target = 0
-	}
-	m.offset = shared.ScrollOffset(m.offset, target, visible, len(rows))
-	m.offset = shared.ScrollOffset(m.offset, cursorLine, visible, len(rows))
-	end := shared.Min(len(rows), m.offset+visible)
-	return append(lines, rows[m.offset:end]...)
-}
-
-// headingLabel is a section title in the column-heading style: upper case
-// and dim, the way the list's group headings and the editor's sections are
-// both set.
-func headingLabel(title string) string {
-	return shared.ColumnHeading.Render(strings.ToUpper(title))
-}
-
-// heading is a headingLabel followed by a dim rule to the edge that keeps
-// the editor's sections apart, with optional detail on the right, e.g.
-// "MATCHING ──────── 3 of 9".
-func heading(title, detail string, width int) string {
-	left := headingLabel(title) + " "
-	right := ""
-	if detail != "" {
-		right = " " + shared.AccentStyle.Render(detail)
-	}
-	fill := shared.Max(0, width-lipgloss.Width(left)-lipgloss.Width(right))
-	return left + shared.DimStyle.Render(strings.Repeat("─", fill)) + right
-}
-
-func (m *Model) propertyRow(p repo.PropertySchema, highlighted bool, width int) string {
-	f, active := m.filters[p.Name]
-
-	marker := "  "
-	if highlighted {
-		marker = shared.Marker(shared.AppColors.Accent)
-		if m.searching || m.editing {
-			marker = shared.Marker(shared.AppColors.Dim)
-		}
-	}
-	name := shared.TextBodyStyle
-	if highlighted || active {
-		name = shared.StrongStyle
-	}
-
-	// The condition of an active filter sits at the right edge.
-	condition := ""
-	if active {
-		condition = f.Condition()
-		if lipgloss.Width(condition) > shared.Half(width) {
-			condition = shared.Fit(condition, shared.Half(width))
-		}
-	}
-	nameWidth := width - 4 - lipgloss.Width(condition) - 1
-	row := marker + typeOf(p.Type).Glyph() + " " + name.Render(shared.Fit(p.Name, nameWidth)) + " " + shared.AccentStyle.Render(condition)
-	if highlighted {
-		return shared.HighlightRow(row, width, !m.searching && !m.editing)
-	}
-	return row
-}
-
-// chips shows each active filter as a chip in the accent tint, the way the
-// inspector shows posture, with a count of any that do not fit on the line.
-func (m *Model) chips(width int) string {
-	if len(m.filters) == 0 {
-		return shared.DimStyle.Render("No filters yet: every repo is shown")
-	}
-	names := make([]string, 0, len(m.filters))
-	for name := range m.filters {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	line := ""
-	for i, name := range names {
-		chip := shared.TintedPill(name+": "+m.filters[name].Condition(), shared.AppColors.Accent, shared.AppColors.AccentTint)
-		more := ""
-		if rest := len(names) - i - 1; rest > 0 {
-			more = shared.AccentStyle.Render(fmt.Sprintf(" +%d", rest))
-		}
-		if lipgloss.Width(line)+lipgloss.Width(chip)+lipgloss.Width(more) > width {
-			if line == "" {
-				return shared.Fit(chip, width)
-			}
-			return line + shared.AccentStyle.Render(fmt.Sprintf("+%d", len(names)-i))
-		}
-		line += chip + " "
-	}
-	return line
-}
-
-func (m *Model) editorLines() []string {
-	p, ok := m.selected()
-	if !ok {
-		return nil
-	}
-	width := m.editorWidth()
-	kind := typeOf(p.Type)
-
-	lines := []string{
-		kind.Glyph() + " " + shared.StrongStyle.Render(p.Name) + " " + repo.TypePill(p.Type),
-		shared.DimStyle.Render("in " + repo.GroupTitle(p.Group)),
-	}
-	lines = append(lines, shared.Wrap(shared.TextBodyStyle, p.Description, width)...)
-
-	lines = append(lines, "", heading("Filter", "", width))
-	lines = append(lines, m.editor.View(m.editing, width)...)
-
-	if len(m.repos) == 0 {
-		return lines
-	}
-
-	lines = append(lines, "", heading("Across your repos", "", width))
-	lines = append(lines, m.chart(p, width)...)
-
-	matching := m.filters.FilterRepos(m.repos)
-	lines = append(lines, "", heading("Matching", fmt.Sprintf("%d of %d", len(matching), len(m.repos)), width))
-	room := m.height - len(lines)
-	return append(lines, matchingNames(matching, width, room)...)
-}
-
-// chartSpan is the widest a chart's bar or sparkline is drawn.
-const chartSpan = 40
-
-// chart shows how the loaded repositories' values of p are spread, so a
-// filter can be chosen without guessing.
-func (m *Model) chart(p repo.PropertySchema, width int) []string {
-	switch p.Type {
-	case "bool":
-		return boolChart(m.repos, p.Name, width)
-	case "int":
-		values := make([]float64, len(m.repos))
-		for i, c := range m.repos {
-			values[i] = float64(c.Int(p.Name))
-		}
-		return rangeChart(values, width, func(v float64) string { return fmt.Sprint(int(v)) })
-	case "time.Time":
-		var values []float64
-		for _, c := range m.repos {
-			if t := c.Time(p.Name); !t.IsZero() {
-				values = append(values, float64(t.Unix()))
-			}
-		}
-		if len(values) == 0 {
-			return []string{shared.TextBodyStyle.Render("No repos have this date set")}
-		}
-		lines := rangeChart(values, width, func(v float64) string { return time.Unix(int64(v), 0).UTC().Format("2006-01-02") })
-		if missing := len(m.repos) - len(values); missing > 0 {
-			lines = append(lines, shared.DimStyle.Render(fmt.Sprintf("%d with no date", missing)))
-		}
-		return lines
-	default:
-		return textChart(m.repos, p.Name, width)
-	}
-}
-
-// boolChart is the share of repos with the property on, as the same
-// fraction bar the inspector draws under a toggle, with the counts below.
-func boolChart(repos []repo.RepoConfig, name string, width int) []string {
-	yes := 0
-	for _, c := range repos {
-		if c.Bool(name) {
-			yes++
-		}
-	}
-	return []string{
-		repo.FractionBar(yes, len(repos), shared.Min(width, chartSpan)),
-		shared.GoodStyle.Render("● yes ") + shared.ValueStyle.Render(fmt.Sprint(yes)) + "   " +
-			shared.DimStyle.Render("○ no ") + shared.ValueStyle.Render(fmt.Sprint(len(repos)-yes)),
-	}
-}
-
-// rangeChart is a sparkline of how values spread between the smallest and
-// largest, labelled at both ends, with the median below. The bars are in
-// the accent colour and empty buckets keep a baseline, like the inspector's
-// histogram.
-func rangeChart(values []float64, width int, format func(float64) string) []string {
-	sorted := append([]float64(nil), values...)
-	sort.Float64s(sorted)
-	lo, hi, median := sorted[0], sorted[len(sorted)-1], sorted[len(sorted)/2]
-
-	span := shared.Min(width, chartSpan)
-	labels := shared.Fit(shared.ValueStyle.Render(format(lo)), span/2) + shared.FitRight(shared.ValueStyle.Render(format(hi)), span-span/2)
-	return []string{
-		repo.Sparkline(histogram(values, span), -1, shared.AccentStyle),
-		labels,
-		shared.TextBodyStyle.Render("median ") + shared.ValueStyle.Render(format(median)),
-	}
-}
-
-// textChart bars the most common values of a text property.
-func textChart(repos []repo.RepoConfig, name string, width int) []string {
-	counts := map[string]int{}
-	for _, c := range repos {
-		counts[c.Text(name)]++
-	}
-	if counts[""] == len(repos) {
-		return []string{shared.TextBodyStyle.Render("No repos have a value set")}
-	}
-	if len(counts) == len(repos) && len(repos) > 1 {
-		return []string{shared.TextBodyStyle.Render("Every repo has a different value")}
-	}
-
-	values := make([]string, 0, len(counts))
-	for v := range counts {
-		values = append(values, v)
-	}
-	sort.Slice(values, func(i, j int) bool {
-		if counts[values[i]] != counts[values[j]] {
-			return counts[values[i]] > counts[values[j]]
-		}
-		return values[i] < values[j]
-	})
-	if len(values) > 5 {
-		values = values[:5]
-	}
-
-	labelWidth := shared.Min(16, width/3)
-	barWidth := shared.Max(1, shared.Min(24, width-labelWidth-5))
-	lines := make([]string, len(values))
-	for i, v := range values {
-		label := shared.ValueStyle.Render(shared.Fit(v, labelWidth))
-		if v == "" {
-			label = shared.DimStyle.Render(shared.Fit("(none)", labelWidth))
-		}
-		share := shared.Share(float64(counts[v])/float64(counts[values[0]]), barWidth)
-		lines[i] = label + " " + shared.Bar(share, barWidth, shared.AccentStyle) + " " + shared.ValueStyle.Render(fmt.Sprint(counts[v]))
-	}
-	return lines
-}
-
-// matchingNames lists repos a line at a time, each with its visibility dot,
-// using at most room lines and ending with a count of any left over.
-func matchingNames(repos []repo.RepoConfig, width, room int) []string {
-	if len(repos) == 0 {
-		return []string{shared.WarnStyle.Render("No repos match these filters")}
-	}
-	var lines []string
-	line := ""
-	for i, c := range repos {
-		entry := repo.VisibilityMark(c) + " " + shared.ValueStyle.Render(c.Name)
-		if line != "" && lipgloss.Width(line)+2+lipgloss.Width(entry) > width {
-			if len(lines) == room-1 {
-				return append(lines, line+shared.AccentStyle.Render(fmt.Sprintf("  +%d more", len(repos)-i)))
-			}
-			lines = append(lines, line)
-			line = ""
-		}
-		if line != "" {
-			line += "  "
-		}
-		line += entry
-	}
-	return append(lines, line)
 }
 
 func (m Model) Breadcrumb() string {
@@ -620,14 +291,14 @@ func (m Model) Typing() bool {
 }
 
 // Help lists the keys for whatever has focus.
-func (m Model) Help() shared.Help {
+func (m Model) Help() ui.Help {
 	finish := []key.Binding{m.keymap.Done, m.keymap.Cancel}
 	switch {
 	case m.searching:
-		return shared.Help{Short: []key.Binding{
-			shared.Hint("type", "to search"),
+		return ui.Help{Short: []key.Binding{
+			ui.Hint("type", "to search"),
 			m.keymap.EndSearch,
-			shared.WithHelp(m.keymap.Cancel, "clear"),
+			ui.WithHelp(m.keymap.Cancel, "clear"),
 		}}
 	case m.editing:
 		keys := append(m.editor.Keys(), finish...)
@@ -635,24 +306,24 @@ func (m Model) Help() shared.Help {
 		if e, ok := m.editor.(*boolEditor); ok {
 			full = [][]key.Binding{e.FullKeys(), finish}
 		}
-		return shared.Help{Short: keys, Full: full}
+		return ui.Help{Short: keys, Full: full}
 	}
 
 	short := []key.Binding{
-		shared.Combine("j/k", "property", m.keymap.Down, m.keymap.Up),
+		ui.Combine("j/k", "property", m.keymap.Down, m.keymap.Up),
 		m.keymap.Edit,
 	}
 	if _, ok := m.editor.(*boolEditor); ok {
-		short = append(short, shared.WithHelp(m.keymap.Toggle, "toggle"))
+		short = append(short, ui.WithHelp(m.keymap.Toggle, "toggle"))
 	}
 	short = append(short, m.keymap.Search, m.keymap.Clear, m.keymap.Back)
 
-	return shared.Help{
+	return ui.Help{
 		Short: short,
 		Full: [][]key.Binding{
 			{
-				shared.WithHelp(m.keymap.Up, "property up"),
-				shared.WithHelp(m.keymap.Down, "property down"),
+				ui.WithHelp(m.keymap.Up, "property up"),
+				ui.WithHelp(m.keymap.Down, "property down"),
 				m.keymap.Top,
 				m.keymap.Bottom,
 				m.keymap.Search,

@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"gh-reponark/repo"
+
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -28,6 +30,32 @@ type capture struct {
 	m      MainModel
 	dir    string
 	prefix string
+	// tab is the property group the repository screens are showing. The list,
+	// matrix and inspector share it, so it is tracked across them to press
+	// tab the right number of times.
+	tab int
+}
+
+// group switches the repository screens to the named property group.
+func (c *capture) group(title string) {
+	titles := repo.GroupTitles()
+	for i, t := range titles {
+		if t == title {
+			c.repeat("tab", (i-c.tab+len(titles))%len(titles))
+			c.tab = i
+			return
+		}
+	}
+	c.t.Fatalf("no property group %q", title)
+}
+
+// expect fails the test if the last snapshot does not show text, so a
+// snapshot's name can be trusted to describe its content.
+func (c *capture) expect(name, text string) {
+	content := ansi.Strip(fmt.Sprint(c.m.View().Content))
+	if !strings.Contains(content, text) {
+		c.t.Errorf("%s-%s: expected to see %q", c.prefix, name, text)
+	}
 }
 
 // drive runs a command and feeds every message it yields back into the
@@ -141,11 +169,55 @@ func TestCapture(t *testing.T) {
 		c.press("?")
 
 		c.press("v")
-		c.press("tab", "tab", "tab") // Features
+		c.group("Features")
 		c.press("l", "l", "l")
 		c.snap("matrix")
+		c.expect("matrix", "Discussions")
 		c.press("v")
 
+		c.press("enter")
+		c.group("Overview")
+		c.press("j", "j")
+		c.snap("overview")
+		c.expect("overview", "Name With Owner")
+
+		c.group("Metrics")
+		c.press("j", "j")
+		c.snap("metrics")
+		c.expect("metrics", "Stargazer Count")
+
+		c.group("Features")
+		c.press("j")
+		c.snap("features")
+		c.expect("features", "Has Wiki Enabled")
+
+		c.group("Merge")
+		c.repeat("j", 4)
+		c.snap("merge")
+		c.expect("merge", "Merge Commit Allowed")
+
+		c.group("Security")
+		c.repeat("j", 3)
+		c.snap("security")
+		c.expect("security", "Vulnerability Alerts")
+
+		// legacy-billing is archived with open alerts and no license. It is
+		// the seventeenth repository alphabetically.
+		c.press("esc")
+		c.press("g")
+		c.repeat("j", 16)
+		c.press("enter")
+		c.group("Overview")
+		c.snap("low-overview")
+		c.expect("low-overview", "legacy-billing")
+		c.group("Security")
+		c.press("j", "j")
+		c.snap("low-security")
+		c.expect("low-security", "Vulnerability Alerts")
+
+		// The filters screen comes last: leaving it applies the toggled
+		// filter, which would hide archived repositories from the steps above.
+		c.press("esc")
 		c.press("f")
 		c.snap("filters")
 		// Toggle "Is Archived" to no: the chip, the segmented control and
@@ -156,38 +228,8 @@ func TestCapture(t *testing.T) {
 		c.press("/", "esc", "/", "stargazer", "enter") // esc clears the old search
 		c.snap("filters-count")
 		c.press("esc")
-
-		c.press("enter")
-		c.press("j", "j")
-		c.snap("overview")
-
-		c.press("tab", "tab") // Metrics
-		c.press("j", "j")
-		c.snap("metrics")
-
-		c.press("tab") // Features
-		c.press("j")
-		c.snap("features")
-
-		c.press("tab") // Merge
-		c.repeat("j", 4)
-		c.snap("merge")
-
-		c.press("tab", "tab") // Security
-		c.repeat("j", 3)
-		c.snap("security")
-
-		// legacy-billing is archived with open alerts and no license. It is
-		// the seventeenth repository alphabetically.
-		c.press("esc")
-		c.press("g")
-		c.repeat("j", 16)
-		c.press("enter")
-		c.press("tab") // Security is still the active tab; one more wraps to Overview
-		c.snap("low-overview")
-		c.repeat("tab", 6) // back round to Security
-		c.press("j", "j")
-		c.snap("low-security")
+		c.snap("list-filtered")
+		c.expect("list-filtered", "1 filter")
 
 		// A sign-in failure lands on the error screen.
 		failing := demoService()

@@ -1,25 +1,19 @@
 package filters
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"gh-reponark/filter"
 	"gh-reponark/repo"
-	"gh-reponark/shared"
+	"gh-reponark/ui"
+	"gh-reponark/ui/uitest"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 )
-
-// plain renders a view to a string with all ANSI styling removed so tests can
-// assert on the visible text.
-func plain(v tea.View) string {
-	return ansi.Strip(fmt.Sprint(v.Content))
-}
 
 // press sends each key to the model in turn. Named keys are spelled out;
 // anything else is typed a character at a time.
@@ -75,7 +69,7 @@ func TestNewModel(t *testing.T) {
 }
 
 func TestNewModel_CopiesCurrentFilters(t *testing.T) {
-	current := FilterMap{"Is Archived": NewBoolFilter("Is Archived", true)}
+	current := filter.FilterMap{"Is Archived": filter.NewBoolFilter("Is Archived", true)}
 
 	m := NewModel(current, nil, 100, 30)
 	press(m, "X")
@@ -98,7 +92,7 @@ func TestModel_Search(t *testing.T) {
 
 	press(m, "/", "wi")
 	assert.True(t, m.searching)
-	content := plain(m.View())
+	content := uitest.Plain(m.View())
 	assert.Contains(t, content, "Has Wiki Enabled", "search matches anywhere in the name")
 	assert.NotContains(t, content, "Is Archived")
 
@@ -128,7 +122,7 @@ func TestModel_Search_NoMatches(t *testing.T) {
 
 	selectProperty(m, "zzz")
 
-	assert.Contains(t, plain(m.View()), "No properties match")
+	assert.Contains(t, uitest.Plain(m.View()), "No properties match")
 	press(m, "enter", "x", "space")
 	assert.False(t, m.editing, "there is nothing to edit")
 	assert.Empty(t, m.filters)
@@ -150,26 +144,16 @@ func TestModel_Navigation(t *testing.T) {
 	assert.Equal(t, "Id", p.Name, "the cursor stops at the top")
 }
 
-func TestModel_ListScrollsToCursor(t *testing.T) {
-	m := NewModel(nil, nil, 100, 10)
-
-	press(m, "G")
-
-	content := plain(m.View())
-	assert.Contains(t, content, m.properties[len(m.properties)-1].Name)
-	assert.NotContains(t, content, "Database ID")
-}
-
 func TestModel_ToggleBoolFromList(t *testing.T) {
 	m := newTestModel()
 	selectProperty(m, "is archived")
 
 	press(m, "space")
-	assert.Equal(t, NewBoolFilter("Is Archived", true), m.filters["Is Archived"])
+	assert.Equal(t, filter.NewBoolFilter("Is Archived", true), m.filters["Is Archived"])
 	assert.Equal(t, "1 of 3 repos match", m.Status())
 
 	press(m, "space")
-	assert.Equal(t, NewBoolFilter("Is Archived", false), m.filters["Is Archived"])
+	assert.Equal(t, filter.NewBoolFilter("Is Archived", false), m.filters["Is Archived"])
 	assert.Equal(t, "2 of 3 repos match", m.Status())
 
 	press(m, "space")
@@ -183,7 +167,7 @@ func TestModel_EditBool(t *testing.T) {
 	press(m, "enter")
 	assert.True(t, m.editing)
 	press(m, "n")
-	assert.Equal(t, NewBoolFilter("Is Archived", false), m.filters["Is Archived"], "changes apply as they are made")
+	assert.Equal(t, filter.NewBoolFilter("Is Archived", false), m.filters["Is Archived"], "changes apply as they are made")
 
 	press(m, "enter")
 	assert.False(t, m.editing)
@@ -191,7 +175,7 @@ func TestModel_EditBool(t *testing.T) {
 }
 
 func TestModel_EditCancelRestores(t *testing.T) {
-	m := NewModel(FilterMap{"Is Archived": NewBoolFilter("Is Archived", true)}, testRepos(), 100, 30)
+	m := NewModel(filter.FilterMap{"Is Archived": filter.NewBoolFilter("Is Archived", true)}, testRepos(), 100, 30)
 	selectProperty(m, "is archived")
 
 	press(m, "enter", "a")
@@ -199,7 +183,7 @@ func TestModel_EditCancelRestores(t *testing.T) {
 
 	press(m, "esc")
 	assert.False(t, m.editing)
-	assert.Equal(t, NewBoolFilter("Is Archived", true), m.filters["Is Archived"], "esc puts back the filter as it was")
+	assert.Equal(t, filter.NewBoolFilter("Is Archived", true), m.filters["Is Archived"], "esc puts back the filter as it was")
 	assert.Equal(t, 1, m.editor.(*boolEditor).choice, "and the editor shows it again")
 }
 
@@ -208,16 +192,16 @@ func TestModel_EditInt(t *testing.T) {
 	selectProperty(m, "stargazer")
 
 	press(m, "enter", "10")
-	assert.Equal(t, NewIntFilter("Stargazer Count", 10, NoMax), m.filters["Stargazer Count"])
+	assert.Equal(t, filter.NewIntFilter("Stargazer Count", 10, filter.NoMax), m.filters["Stargazer Count"])
 	assert.Equal(t, "2 of 3 repos match", m.Status())
 
 	press(m, "tab", "x")
-	assert.Contains(t, plain(m.View()), `"x" is not a whole number`)
-	assert.Equal(t, NewIntFilter("Stargazer Count", 10, NoMax), m.filters["Stargazer Count"], "an unreadable bound keeps the last good filter")
+	assert.Contains(t, uitest.Plain(m.View()), `"x" is not a whole number`)
+	assert.Equal(t, filter.NewIntFilter("Stargazer Count", 10, filter.NoMax), m.filters["Stargazer Count"], "an unreadable bound keeps the last good filter")
 
 	press(m, "backspace", "100", "enter")
-	assert.Equal(t, NewIntFilter("Stargazer Count", 10, 100), m.filters["Stargazer Count"])
-	assert.Contains(t, plain(m.View()), "10 – 100", "the list shows the condition")
+	assert.Equal(t, filter.NewIntFilter("Stargazer Count", 10, 100), m.filters["Stargazer Count"])
+	assert.Contains(t, uitest.Plain(m.View()), "10 – 100", "the list shows the condition")
 }
 
 func TestModel_EditText(t *testing.T) {
@@ -226,14 +210,14 @@ func TestModel_EditText(t *testing.T) {
 
 	press(m, "enter", "go", "enter")
 
-	assert.Equal(t, NewStringFilter("Primary Language", "go"), m.filters["Primary Language"])
+	assert.Equal(t, filter.NewStringFilter("Primary Language", "go"), m.filters["Primary Language"])
 	assert.Equal(t, "2 of 3 repos match", m.Status())
 }
 
 func TestModel_Clear(t *testing.T) {
-	m := NewModel(FilterMap{
-		"Is Archived":     NewBoolFilter("Is Archived", true),
-		"Stargazer Count": NewIntFilter("Stargazer Count", 1, 5),
+	m := NewModel(filter.FilterMap{
+		"Is Archived":     filter.NewBoolFilter("Is Archived", true),
+		"Stargazer Count": filter.NewIntFilter("Stargazer Count", 1, 5),
 	}, nil, 100, 30)
 	selectProperty(m, "is archived")
 
@@ -253,7 +237,7 @@ func TestModel_BackSendsFilters(t *testing.T) {
 	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	if assert.NotNil(t, cmd) {
-		prev, ok := cmd().(shared.PreviousMsg)
+		prev, ok := cmd().(ui.PreviousMsg)
 		assert.True(t, ok)
 		assert.Equal(t, FiltersMsg(m.filters), prev.Message)
 	}
@@ -270,10 +254,10 @@ func TestModel_EscLeavesEditingBeforeScreen(t *testing.T) {
 }
 
 func TestModel_View(t *testing.T) {
-	m := NewModel(FilterMap{"Is Archived": NewBoolFilter("Is Archived", false)}, testRepos(), 100, 30)
+	m := NewModel(filter.FilterMap{"Is Archived": filter.NewBoolFilter("Is Archived", false)}, testRepos(), 100, 30)
 	selectProperty(m, "is archived")
 
-	content := plain(m.View())
+	content := uitest.Plain(m.View())
 
 	assert.Contains(t, content, "▐Is Archived: no▌", "active filters are chips")
 	assert.Contains(t, content, "STATUS", "properties are grouped under column headings")
@@ -286,9 +270,9 @@ func TestModel_View(t *testing.T) {
 }
 
 func TestModel_View_FitsDimensions(t *testing.T) {
-	m := NewModel(FilterMap{"Is Archived": NewBoolFilter("Is Archived", false)}, testRepos(), 90, 20)
+	m := NewModel(filter.FilterMap{"Is Archived": filter.NewBoolFilter("Is Archived", false)}, testRepos(), 90, 20)
 
-	lines := strings.Split(plain(m.View()), "\n")
+	lines := strings.Split(uitest.Plain(m.View()), "\n")
 
 	assert.Len(t, lines, 20)
 	for _, line := range lines {
@@ -296,79 +280,12 @@ func TestModel_View_FitsDimensions(t *testing.T) {
 	}
 }
 
-func TestModel_View_NoFilters(t *testing.T) {
-	assert.Contains(t, plain(newTestModel().View()), "No filters yet: every repo is shown")
-}
-
-func TestModel_Charts(t *testing.T) {
-	m := newTestModel()
-
-	tests := []struct {
-		query string
-		want  []string
-	}{
-		{query: "is archived", want: []string{"● yes 1   ○ no 2"}},
-		{query: "stargazer", want: []string{"3", "900", "median 40"}},
-		{query: "language", want: []string{"Go", "Ruby"}},
-		{query: "pushed", want: []string{"No repos have this date set"}},
-		{query: "homepage", want: []string{"No repos have a value set"}},
-		{query: "name with owner", want: []string{"No repos have a value set"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.query, func(t *testing.T) {
-			press(m, "/", "esc")
-			selectProperty(m, tt.query)
-			p, _ := m.selected()
-			chart := ansi.Strip(strings.Join(m.chart(p, 40), "\n"))
-			for _, want := range tt.want {
-				assert.Contains(t, chart, want)
-			}
-		})
-	}
-}
-
-func TestTextChart(t *testing.T) {
-	lines := textChart(testRepos(), "Primary Language", 40)
-
-	assert.Len(t, lines, 2)
-	assert.True(t, strings.HasPrefix(ansi.Strip(lines[0]), "Go "), "the most common value comes first")
-	assert.True(t, strings.HasSuffix(ansi.Strip(lines[0]), " 2"))
-	assert.Less(t, strings.Count(lines[1], "━"), strings.Count(lines[0], "━"), "bars are proportional")
-
-	assert.Equal(t, []string{"Every repo has a different value"}, stripAll(textChart(testRepos(), "Name", 40)))
-}
-
-func TestMatchingNames(t *testing.T) {
-	repos := testRepos()
-
-	assert.Equal(t, []string{"● old  ● new  ● busy"}, stripAll(matchingNames(repos, 40, 5)))
-	assert.Equal(t, []string{"● old  ● new", "● busy"}, stripAll(matchingNames(repos, 14, 5)), "names wrap")
-	assert.Equal(t, []string{"● old  +2 more"}, stripAll(matchingNames(repos, 6, 1)), "extra names are counted")
-	assert.Equal(t, []string{"No repos match these filters"}, stripAll(matchingNames(nil, 40, 5)))
-}
-
-func TestModel_View_WithoutRepos(t *testing.T) {
-	content := plain(NewModel(nil, nil, 100, 30).View())
-
-	assert.Contains(t, content, "FILTER ")
-	assert.NotContains(t, content, "ACROSS YOUR REPOS", "there is nothing to chart")
-	assert.NotContains(t, content, "MATCHING")
-}
-
-func stripAll(lines []string) []string {
-	out := make([]string, len(lines))
-	for i, line := range lines {
-		out[i] = ansi.Strip(line)
-	}
-	return out
-}
-
 func TestModel_Breadcrumb(t *testing.T) {
 	assert.Equal(t, "Filters", newTestModel().Breadcrumb())
 }
 
 func TestModel_Status_WithoutRepos(t *testing.T) {
-	m := NewModel(FilterMap{"Is Archived": NewBoolFilter("Is Archived", true)}, nil, 80, 24)
+	m := NewModel(filter.FilterMap{"Is Archived": filter.NewBoolFilter("Is Archived", true)}, nil, 80, 24)
 	assert.Equal(t, "1 active", m.Status())
 }
 
@@ -407,7 +324,7 @@ func TestModel_SearchTypesEveryLetter(t *testing.T) {
 }
 
 func TestModel_BackspaceDoesNotClear(t *testing.T) {
-	m := NewModel(FilterMap{"Id": NewStringFilter("Id", "x")}, nil, 100, 30)
+	m := NewModel(filter.FilterMap{"Id": filter.NewStringFilter("Id", "x")}, nil, 100, 30)
 
 	press(m, "backspace")
 
@@ -455,19 +372,19 @@ func TestDateEditor(t *testing.T) {
 	}
 	f, err = e.Filter()
 	assert.NoError(t, err)
-	assert.Equal(t, NewDateFilter("Pushed At", time.Time{}, time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)), f)
+	assert.Equal(t, filter.NewDateFilter("Pushed At", time.Time{}, time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)), f)
 
-	e = newDateEditor("Pushed At", NewDateFilter("Pushed At", time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)))
+	e = newDateEditor("Pushed At", filter.NewDateFilter("Pushed At", time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)))
 	_, err = e.Filter()
 	assert.EqualError(t, err, "the start is after the end")
 }
 
 func TestIntEditor_SeedsAndValidates(t *testing.T) {
-	e := newIntEditor("Stars", NewIntFilter("Stars", 5, NoMax))
+	e := newIntEditor("Stars", filter.NewIntFilter("Stars", 5, filter.NoMax))
 	assert.Equal(t, "5", e.inputs[0].Value())
 	assert.Equal(t, "", e.inputs[1].Value(), "an open bound is left blank")
 
-	e = newIntEditor("Stars", NewIntFilter("Stars", 9, 1))
+	e = newIntEditor("Stars", filter.NewIntFilter("Stars", 9, 1))
 	_, err := e.Filter()
 	assert.EqualError(t, err, "the minimum is above the maximum")
 }
