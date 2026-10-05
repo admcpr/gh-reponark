@@ -33,7 +33,9 @@ jobs:
       - name: staticcheck
         uses: dominikh/staticcheck-action@v1
         with:
-          version: latest
+          # The newest staticcheck needs a newer Go than go.mod declares; this
+          # is the last release that builds with Go 1.25. Bump it with go.mod.
+          version: "v0.7.0"
           install-go: false
       - name: govulncheck
         uses: golang/govulncheck-action@v1
