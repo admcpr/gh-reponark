@@ -88,26 +88,3 @@ jobs:
           go-version-file: go.mod
       - name: go build
         run: go build -trimpath -o /dev/null .
-
-  screenshots:
-    name: Screenshots
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - name: Capture every screen against the demo data
-        run: CAPTURE_DIR="$RUNNER_TEMP/captures" go test -tags capture -run TestCapture ./... -count=1
-      - name: Render to SVG
-        run: |
-          go install github.com/charmbracelet/freeze@latest
-          mkdir -p "$RUNNER_TEMP/svg"
-          for f in "$RUNNER_TEMP"/captures/*.ans; do
-            freeze "$f" --output "$RUNNER_TEMP/svg/$(basename "${f%.ans}").svg" --theme dracula --padding 8
-          done
-      - uses: actions/upload-artifact@v4
-        with:
-          name: screenshots
-          path: ${{ runner.temp }}/svg
-          retention-days: 14

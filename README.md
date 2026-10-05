@@ -62,7 +62,7 @@ Every screen can be captured as text for a visual check without a terminal:
 ```
 CAPTURE_DIR=captures go test -tags capture -run TestCapture ./...
 ```
-This writes `<width>x<height>-<screen>.ans` (with colour) and `.txt` files; CI renders them to SVG and attaches them to every pull request.
+This writes `<width>x<height>-<screen>.ans` (with colour) and `.txt` files you can diff or render.
 
 `demo.gif` is recorded from `demo.tape` with [VHS](https://github.com/charmbracelet/vhs); the release workflow refreshes it when the UI changes, or run the "Demo" workflow by hand.
 
