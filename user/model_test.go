@@ -11,6 +11,7 @@ import (
 	"gh-reponark/github/githubtest"
 	"gh-reponark/shared"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -19,6 +20,24 @@ import (
 
 // plain renders a view to a string with all ANSI styling removed so tests can
 // assert on the visible text.
+// loadMsg runs cmd and returns the message its loading command produced,
+// skipping the spinner tick that Init batches alongside it.
+func loadMsg(cmd tea.Cmd) tea.Msg {
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, c := range msg {
+			if m := loadMsg(c); m != nil {
+				return m
+			}
+		}
+		return nil
+	case spinner.TickMsg:
+		return nil
+	default:
+		return msg
+	}
+}
+
 func plain(v tea.View) string {
 	return ansi.Strip(fmt.Sprint(v.Content))
 }
@@ -71,7 +90,7 @@ func TestModel_Init_LoadsUser(t *testing.T) {
 	cmd := m.Init()
 
 	if assert.NotNil(t, cmd) {
-		msg, ok := cmd().(userLoadedMsg)
+		msg, ok := loadMsg(cmd).(userLoadedMsg)
 		assert.True(t, ok, "expected a userLoadedMsg")
 		assert.Equal(t, fake.User, github.User(msg))
 	}
@@ -81,7 +100,7 @@ func TestModel_Init_ReportsErrors(t *testing.T) {
 	fake := &githubtest.Fake{UserErr: errors.New("not logged in")}
 	m := NewModel(fake, 80, 24)
 
-	msg, ok := m.Init()().(shared.ErrorMsg)
+	msg, ok := loadMsg(m.Init()).(shared.ErrorMsg)
 
 	assert.True(t, ok, "expected an ErrorMsg")
 	assert.EqualError(t, msg.Err, "not logged in")
@@ -261,7 +280,7 @@ func TestModel_View_SigningIn(t *testing.T) {
 
 	content := plain(m.View())
 
-	assert.Contains(t, content, "Signing in…")
+	assert.Contains(t, content, "Signing in to GitHub…")
 	assert.NotContains(t, content, "ACCOUNTS")
 }
 
@@ -298,10 +317,10 @@ func TestModel_View_Cards(t *testing.T) {
 
 	assert.Equal(t, "  ACCOUNTS  ▐1 organisation▌", strings.TrimRight(lines[0], " "))
 	// The user's card: monogram, name and login, the you pill.
-	assert.Equal(t, "▌ O  The Octocat  octocat  ▐you▌", strings.TrimRight(lines[1], " "))
-	assert.Equal(t, "▌    Mascot", strings.TrimRight(lines[2], " "))
-	assert.Equal(t, "▌    8 repos · 6 public · 2 private · 9k followers · since 2011", strings.TrimRight(lines[3], " "))
-	assert.Equal(t, "▌    https://github.com/octocat", strings.TrimRight(lines[4], " "))
+	assert.Equal(t, "  O  The Octocat  octocat  ▐you▌", strings.TrimRight(lines[1], " "))
+	assert.Equal(t, "     Mascot", strings.TrimRight(lines[2], " "))
+	assert.Equal(t, "     8 repos · 6 public · 2 private · 9k followers · since 2011", strings.TrimRight(lines[3], " "))
+	assert.Equal(t, "     https://github.com/octocat", strings.TrimRight(lines[4], " "))
 	assert.Equal(t, "", strings.TrimRight(lines[5], " "), "a blank line separates the cards")
 	// The organization's card: whitespace in the description is collapsed.
 	assert.Equal(t, "  A  Acme Robotics  acme  ▐org▌ ▐admin▌ ▐verified▌", strings.TrimRight(lines[6], " "))
@@ -316,8 +335,8 @@ func TestModel_View_ShortTier(t *testing.T) {
 
 	lines := strings.Split(plain(m.View()), "\n")
 
-	assert.Equal(t, "▌ O  The Octocat  octocat  ▐you▌", strings.TrimRight(lines[1], " "))
-	assert.Equal(t, "▌    8 repos · 6 public · 2 private · 9k followers · since 2011", strings.TrimRight(lines[2], " "))
+	assert.Equal(t, "  O  The Octocat  octocat  ▐you▌", strings.TrimRight(lines[1], " "))
+	assert.Equal(t, "     8 repos · 6 public · 2 private · 9k followers · since 2011", strings.TrimRight(lines[2], " "))
 	assert.Equal(t, "", strings.TrimRight(lines[3], " "))
 	assert.Equal(t, "  A  Acme Robotics  acme  ▐org▌ ▐admin▌ ▐verified▌", strings.TrimRight(lines[4], " "))
 	assert.NotContains(t, plain(m.View()), "https://", "short cards drop the URL and description")
@@ -330,9 +349,9 @@ func TestModel_View_NarrowTier(t *testing.T) {
 	content := plain(m.View())
 	lines := strings.Split(content, "\n")
 
-	assert.Equal(t, "▌ The Octocat  octocat  ▐you▌", strings.TrimRight(lines[1], " "), "no monogram when narrow")
-	assert.Equal(t, "▌ Mascot", strings.TrimRight(lines[2], " "))
-	assert.Equal(t, "▌ 8 repos · 6 public · 2 private", strings.TrimRight(lines[3], " "), "facts are shed from the end")
+	assert.Equal(t, "  The Octocat  octocat  ▐you▌", strings.TrimRight(lines[1], " "), "no monogram when narrow")
+	assert.Equal(t, "  Mascot", strings.TrimRight(lines[2], " "))
+	assert.Equal(t, "  8 repos · 6 public · 2 private", strings.TrimRight(lines[3], " "), "facts are shed from the end")
 	assert.Equal(t, "", strings.TrimRight(lines[4], " "), "and there is no URL line")
 	assert.Equal(t, "  Acme Robotics  ▐org▌ ▐admin▌ ▐verified▌", strings.TrimRight(lines[5], " "),
 		"the login is dropped whole before the name is cut")

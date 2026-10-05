@@ -376,9 +376,9 @@ func (m *Model) propertyRow(p repo.PropertySchema, highlighted bool, width int) 
 
 	marker := "  "
 	if highlighted {
-		marker = shared.AccentStyle.Render("▌ ")
+		marker = shared.Marker(shared.AppColors.Accent)
 		if m.searching || m.editing {
-			marker = shared.DimStyle.Render("▌ ")
+			marker = shared.Marker(shared.AppColors.Dim)
 		}
 	}
 	name := shared.TextBodyStyle

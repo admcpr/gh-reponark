@@ -15,6 +15,7 @@ import (
 	"gh-reponark/shared"
 	"gh-reponark/user"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -51,6 +52,24 @@ func (m *titledModel) Status() string     { return m.status }
 
 // plain renders a view to a string with all ANSI styling removed so tests can
 // assert on the visible text.
+// loadMsg runs cmd and returns the message its loading command produced,
+// skipping the spinner tick that Init batches alongside it.
+func loadMsg(cmd tea.Cmd) tea.Msg {
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, c := range msg {
+			if m := loadMsg(c); m != nil {
+				return m
+			}
+		}
+		return nil
+	case spinner.TickMsg:
+		return nil
+	default:
+		return msg
+	}
+}
+
 func plain(v tea.View) string {
 	return ansi.Strip(fmt.Sprint(v.Content))
 }
@@ -253,7 +272,7 @@ func TestMainModel_Update_ErrorScreenGoesBack(t *testing.T) {
 func TestMainModel_Update_ErrorFromInit(t *testing.T) {
 	m := NewMainModel(&githubtest.Fake{UserErr: errors.New("not logged in")})
 
-	m, _ = update(m, m.Init()())
+	m, _ = update(m, loadMsg(m.Init()))
 
 	assert.IsType(t, &shared.ErrorModel{}, current(t, m), "an error while loading the user should show the error screen")
 }

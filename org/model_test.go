@@ -13,6 +13,7 @@ import (
 	"gh-reponark/shared"
 
 	"charm.land/bubbles/v2/progress"
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -21,6 +22,24 @@ import (
 
 // plain renders a view to a string with all ANSI styling removed so tests can
 // assert on the visible text.
+// loadMsg runs cmd and returns the message its loading command produced,
+// skipping the spinner tick that Init batches alongside it.
+func loadMsg(cmd tea.Cmd) tea.Msg {
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, c := range msg {
+			if m := loadMsg(c); m != nil {
+				return m
+			}
+		}
+		return nil
+	case spinner.TickMsg:
+		return nil
+	default:
+		return msg
+	}
+}
+
 func plain(v tea.View) string {
 	return ansi.Strip(fmt.Sprint(v.Content))
 }
@@ -175,7 +194,7 @@ func TestModel_Init_LoadsFirstPage(t *testing.T) {
 			cmd := m.Init()
 
 			if assert.NotNil(t, cmd) {
-				msg, ok := cmd().(repositoryPageMsg)
+				msg, ok := loadMsg(cmd).(repositoryPageMsg)
 				assert.True(t, ok, "expected a repositoryPageMsg")
 				assert.Equal(t, []github.RepositoryRef{{Name: "widgets"}, {Name: "gadgets"}}, msg.Repositories)
 				assert.Equal(t, 2, msg.TotalCount)
@@ -190,7 +209,7 @@ func TestModel_Init_ReportsErrors(t *testing.T) {
 	fake := &githubtest.Fake{ListErr: errors.New("no such org")}
 	m := NewModel(fake, shared.OrgKey{Name: "acme"}, 80, 24)
 
-	msg, ok := m.Init()().(shared.ErrorMsg)
+	msg, ok := loadMsg(m.Init()).(shared.ErrorMsg)
 
 	assert.True(t, ok, "expected an ErrorMsg")
 	assert.EqualError(t, msg.Err, "no such org")
@@ -685,7 +704,7 @@ func TestModel_View_WhileLoading(t *testing.T) {
 
 	content := plain(m.View())
 
-	assert.Contains(t, content, "Getting repositories")
+	assert.Contains(t, content, "Fetching settings")
 	assert.Contains(t, content, "10 of 25")
 }
 
@@ -877,7 +896,7 @@ func TestModel_ProgressView(t *testing.T) {
 
 	content := plain(m.ProgressView())
 
-	assert.Contains(t, content, "Getting repositories ... 0 of 0")
+	assert.Contains(t, content, "Listing repositories…")
 }
 
 func TestNewOrgKeyMap(t *testing.T) {

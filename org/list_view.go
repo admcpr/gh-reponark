@@ -81,10 +81,10 @@ func (m *Model) listRow(c repo.RepoConfig, selected bool, nameWidth int, languag
 	marker, name := "  ", shared.Fit(c.Name, nameWidth)
 	switch {
 	case selected && m.inspecting:
-		marker = shared.DimStyle.Render("▌ ")
+		marker = shared.Marker(shared.AppColors.Dim)
 		name = shared.StrongStyle.Render(name)
 	case selected:
-		marker = shared.AccentStyle.Render("▌ ")
+		marker = shared.Marker(shared.AppColors.Accent)
 		name = shared.StrongStyle.Render(name)
 	}
 

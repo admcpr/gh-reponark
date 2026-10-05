@@ -124,6 +124,14 @@ var (
 // Pill draws text as a solid capsule: a half-block cap either side gives the
 // ends a rounded look, and the text sits in dark ink on the colour. It is
 // always len(text)+2 cells wide, so a row of pills lines up.
+// Marker is the two-cell selection marker at the left of a selected row: a
+// cell painted in c followed by a space. Painting the background rather than
+// drawing a half-block glyph keeps the bar solid down a multi-line selection,
+// since a terminal's line spacing would otherwise show as gaps between glyphs.
+func Marker(c color.Color) string {
+	return lipgloss.NewStyle().Background(c).Render(" ") + " "
+}
+
 func Pill(text string, c color.Color) string {
 	cap := lipgloss.NewStyle().Foreground(c)
 	ink := lipgloss.NewStyle().Foreground(AppColors.Background).Background(c).Bold(true)

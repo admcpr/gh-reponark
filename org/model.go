@@ -3,6 +3,7 @@ package org
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"gh-reponark/filters"
 	"gh-reponark/github"
@@ -11,8 +12,8 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/progress"
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 )
 
 // maxConcurrentBatches bounds how many configuration requests are in flight
@@ -71,6 +72,10 @@ type Model struct {
 	height int
 
 	progress progress.Model
+	spinner  spinner.Model
+	// tickerOffset is how far the loading screen's ticker of repository
+	// names has scrolled; it advances with the spinner.
+	tickerOffset int
 }
 
 func NewModel(svc github.Service, orgKey shared.OrgKey, width, height int) *Model {
@@ -84,7 +89,8 @@ func NewModel(svc github.Service, orgKey shared.OrgKey, width, height int) *Mode
 		height:    height,
 		keymap:    keymap,
 		repoModel: repo.NewModel(width/2, height),
-		progress:  progress.New(progress.WithoutPercentage()),
+		progress:  shared.NewProgress(),
+		spinner:   shared.NewSpinner(),
 	}
 	m.repoModel.SetDimensions(m.inspectorWidth(), height)
 
@@ -146,8 +152,11 @@ func (m *Model) pageSize() int {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return m.loadRepositoryPage("")
+	return tea.Batch(m.loadRepositoryPage(""), m.spinner.Tick)
 }
+
+// loading reports whether repositories are still arriving.
+func (m *Model) loading() bool { return m.progress.Percent() < 1 }
 
 // loadRepositoryPage returns a command that fetches one page of repository
 // names, starting after the given cursor.
@@ -261,6 +270,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case progress.FrameMsg:
 		progressModel, cmd := m.progress.Update(msg)
 		m.progress = progressModel
+		return m, cmd
+
+	case spinner.TickMsg:
+		// The spinner only turns while there is something to wait for.
+		if !m.loading() {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		m.tickerOffset++
 		return m, cmd
 
 	case tea.KeyPressMsg:
@@ -476,10 +495,34 @@ func (m Model) Help() shared.Help {
 	}
 }
 
+// ProgressView is the loading screen: the account being opened, a spinner
+// with the current phase and count, the gradient bar and a ticker of the
+// repositories that have just arrived.
 func (m *Model) ProgressView() tea.View {
-	m.progress.SetWidth(m.width)
-	text := fmt.Sprintf("Getting repositories ... %d of %d\n", len(m.repos), m.repoCount)
-	return tea.NewView(fmt.Sprint(lipgloss.JoinVertical(lipgloss.Center, text, m.progress.View())))
+	width := shared.LoadingWidth(m.width)
+	m.progress.SetWidth(width)
+
+	title := shared.StrongStyle.Render(m.Title) + "  " + shared.TintedPill("loading", shared.AppColors.Accent, shared.AppColors.AccentTint)
+
+	phase := "Listing repositories…"
+	if m.repoCount > 0 && (len(m.pending) > 0 || m.inFlight > 0 || len(m.repos) > 0) {
+		phase = fmt.Sprintf("Fetching settings  %s of %s",
+			shared.ValueStyle.Render(fmt.Sprint(len(m.repos))), shared.ValueStyle.Render(fmt.Sprint(m.repoCount)))
+	}
+	status := m.spinner.View() + " " + shared.TextBodyStyle.Render(phase)
+
+	return tea.NewView(shared.Loading(m.width, m.height, title, status, m.progress.View(), m.ticker(width)))
+}
+
+// ticker is a line of the repository names listed so far, in the order they
+// arrived, scrolling right to left once there are more than fit. It draws on
+// the names rather than the loaded settings, so it starts moving as soon as
+// the first page of the listing lands.
+func (m *Model) ticker(width int) string {
+	if len(m.names) == 0 {
+		return ""
+	}
+	return shared.DimStyle.Render(shared.Marquee(strings.Join(m.names, "  ·  "), width, m.tickerOffset))
 }
 
 // orgKeyMap holds the bindings the repository screen handles itself. Tab and

@@ -84,3 +84,14 @@ func TestNewHelpModel(t *testing.T) {
 		})
 	}
 }
+
+func TestMarquee(t *testing.T) {
+	assert.Equal(t, "     ", Marquee("abcdefgh", 5, 0), "starts blank")
+	assert.Equal(t, "   ab", Marquee("abcdefgh", 5, 2), "the text slides in from the right")
+	assert.Equal(t, "abcde", Marquee("abcdefgh", 5, 5))
+	assert.Equal(t, "h    ", Marquee("abcdefgh", 5, 12), "the gap follows the end of the text")
+	assert.Equal(t, "   ab", Marquee("abcdefgh", 5, 20), "and it comes round again")
+	assert.Equal(t, "   ab", Marquee("abc", 5, 2), "short text slides in too")
+	assert.Equal(t, "abc  ", Marquee("abc", 5, 5))
+	assert.Equal(t, "abc  ", Marquee("abc", 5, 50), "and then holds still")
+}

@@ -142,7 +142,7 @@ func (m *Model) matrixView() string {
 func (m *Model) matrixRow(c repo.RepoConfig, selected bool, shown []matrixColumn, first, nameWidth int) string {
 	marker, name := "  ", shared.Fit(c.Name, nameWidth)
 	if selected {
-		marker = shared.AccentStyle.Render("▌ ")
+		marker = shared.Marker(shared.AppColors.Accent)
 		name = shared.StrongStyle.Render(name)
 	}
 	row := marker + repo.VisibilityMark(c) + " " + name + shared.DimStyle.Render(" │ ")

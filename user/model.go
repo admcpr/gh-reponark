@@ -15,6 +15,7 @@ import (
 	"gh-reponark/shared"
 
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -75,16 +76,17 @@ type Model struct {
 	// items are the accounts to pick from: the user first, then their
 	// organizations. cursor is the selected one and offset the first card
 	// scrolled into view.
-	items  []account
-	cursor int
-	offset int
-	width  int
-	height int
-	keymap userKeyMap
+	items   []account
+	cursor  int
+	offset  int
+	width   int
+	height  int
+	keymap  userKeyMap
+	spinner spinner.Model
 }
 
 func NewModel(svc github.Service, width, height int) *Model {
-	return &Model{svc: svc, width: width, height: height, keymap: newUserKeyMap()}
+	return &Model{svc: svc, width: width, height: height, keymap: newUserKeyMap(), spinner: shared.NewSpinner()}
 }
 
 func (m *Model) SetDimensions(width, height int) {
@@ -94,7 +96,7 @@ func (m *Model) SetDimensions(width, height int) {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return m.loadUser
+	return tea.Batch(m.loadUser, m.spinner.Tick)
 }
 
 // loadUser fetches the authenticated user and their organizations.
@@ -184,6 +186,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case userLoadedMsg:
 		m.SetUser(github.User(msg))
 
+	case spinner.TickMsg:
+		// The spinner only turns until the accounts arrive.
+		if m.login != "" {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.keymap.Select):
@@ -221,8 +232,9 @@ func (m Model) View() tea.View {
 	width, height := shared.Max(1, m.width), shared.Max(1, m.height)
 	if m.login == "" {
 		// Nothing to pick from yet: say so in the middle of the pane.
-		return tea.NewView(lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
-			shared.DimStyle.Render("Signing in…")))
+		return tea.NewView(shared.Loading(width, height,
+			shared.StrongStyle.Render("reponark"),
+			m.spinner.View()+" "+shared.TextBodyStyle.Render("Signing in to GitHub…")))
 	}
 
 	lines := []string{m.heading(width)}
@@ -259,7 +271,7 @@ func (m Model) heading(width int) string {
 func (m Model) card(a account, selected bool, width int) []string {
 	marker := "  "
 	if selected {
-		marker = shared.AccentStyle.Render("▌ ")
+		marker = shared.Marker(shared.AppColors.Accent)
 	}
 	// Text lines start under the name, which sits after the monogram.
 	indent := marker
