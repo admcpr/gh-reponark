@@ -14,9 +14,7 @@ func (m *stubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return m, nil }
 func (m *stubModel) View() tea.View                          { return tea.NewView("") }
 
 // mockModel satisfies tea.Model by value, so it can be pushed as a non-pointer.
-type mockModel struct {
-	state string
-}
+type mockModel struct{}
 
 func (m mockModel) Init() tea.Cmd                           { return nil }
 func (m mockModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return m, nil }

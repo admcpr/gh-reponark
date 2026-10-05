@@ -11,7 +11,7 @@ import (
 
 // demoService is an in-memory GitHub with a user "demo" and a varied set of
 // repositories, so the UI can be run and looked at without a token. It is
-// used when the REPONARK_DEMO environment variable is set.
+// used when the extension is run with --demo.
 func demoService() *githubtest.Fake {
 	return &githubtest.Fake{
 		User: github.User{
