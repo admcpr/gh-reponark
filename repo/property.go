@@ -2,7 +2,6 @@ package repo
 
 import (
 	"fmt"
-	"gh-reponark/shared"
 	"reflect"
 	"regexp"
 	"sort"
@@ -82,7 +81,7 @@ type RepoProperty struct {
 func (s RepoProperty) String() string {
 	switch value := s.Value.(type) {
 	case bool:
-		return shared.YesNo(value)
+		return YesNo(value)
 	case string:
 		return value
 	case time.Time:

@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"gh-reponark/filter"
 	"gh-reponark/repo"
-	"gh-reponark/shared"
+	"gh-reponark/ui"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
@@ -24,7 +25,7 @@ type editor interface {
 	Update(msg tea.Msg) tea.Cmd
 	// Filter returns the filter the editor describes, nil for no filter, or
 	// an error when the input cannot be read.
-	Filter() (Filter, error)
+	Filter() (filter.Filter, error)
 	Focus() tea.Cmd
 	Blur()
 	// View renders the editor's controls in width cells.
@@ -34,7 +35,7 @@ type editor interface {
 }
 
 // newEditor returns the editor for property, seeded with its current filter.
-func newEditor(property repo.PropertySchema, current Filter) editor {
+func newEditor(property repo.PropertySchema, current filter.Filter) editor {
 	switch property.Type {
 	case "bool":
 		return newBoolEditor(property.Name, current)
@@ -72,7 +73,7 @@ type boolEditorKeyMap struct {
 	Prev, Next, Any, Yes, No key.Binding
 }
 
-func newBoolEditor(name string, current Filter) *boolEditor {
+func newBoolEditor(name string, current filter.Filter) *boolEditor {
 	e := &boolEditor{name: name, keymap: boolEditorKeyMap{
 		Prev: key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "previous")),
 		Next: key.NewBinding(key.WithKeys("right", "l", "space"), key.WithHelp("→/l/space", "next")),
@@ -80,7 +81,7 @@ func newBoolEditor(name string, current Filter) *boolEditor {
 		Yes:  key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yes")),
 		No:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "no")),
 	}}
-	if f, ok := current.(BoolFilter); ok {
+	if f, ok := current.(filter.BoolFilter); ok {
 		e.choice = map[bool]int{true: 1, false: 2}[f.Value]
 	}
 	return e
@@ -107,11 +108,11 @@ func (e *boolEditor) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-func (e *boolEditor) Filter() (Filter, error) {
+func (e *boolEditor) Filter() (filter.Filter, error) {
 	if e.choice == 0 {
 		return nil, nil
 	}
-	return NewBoolFilter(e.name, e.choice == 1), nil
+	return filter.NewBoolFilter(e.name, e.choice == 1), nil
 }
 
 func (e *boolEditor) Focus() tea.Cmd { return nil }
@@ -119,7 +120,7 @@ func (e *boolEditor) Blur()          {}
 
 // boolChoiceColors colour each choice by what it means: any is neutral,
 // yes and no are the good and bad colours.
-var boolChoiceColors = []color.Color{shared.AppColors.Blue, shared.AppColors.Good, shared.AppColors.Bad}
+var boolChoiceColors = []color.Color{ui.AppColors.Blue, ui.AppColors.Good, ui.AppColors.Bad}
 
 // View draws the choices as a segmented control: the chosen one a solid pill
 // in its colour, the rest ghosted, as in the inspector's group control.
@@ -127,16 +128,16 @@ func (e *boolEditor) View(_ bool, _ int) []string {
 	options := make([]string, len(boolChoices))
 	for i, choice := range boolChoices {
 		if i == e.choice {
-			options[i] = shared.Pill(choice, boolChoiceColors[i])
+			options[i] = ui.Pill(choice, boolChoiceColors[i])
 		} else {
-			options[i] = shared.GhostPill(choice)
+			options[i] = ui.GhostPill(choice)
 		}
 	}
 	return []string{strings.Join(options, " ")}
 }
 
 func (e *boolEditor) Keys() []key.Binding {
-	return []key.Binding{shared.Combine("←/→", "choose", e.keymap.Prev, e.keymap.Next), e.keymap.Yes, e.keymap.No, e.keymap.Any}
+	return []key.Binding{ui.Combine("←/→", "choose", e.keymap.Prev, e.keymap.Next), e.keymap.Yes, e.keymap.No, e.keymap.Any}
 }
 
 // FullKeys lists every key the editor handles, for the full help.
@@ -151,11 +152,11 @@ type rangeEditor struct {
 	labels [2]string
 	inputs [2]textinput.Model
 	active int
-	build  func(lower, upper string) (Filter, error)
+	build  func(lower, upper string) (filter.Filter, error)
 	next   key.Binding
 }
 
-func newRangeEditor(labels, placeholders, values [2]string, build func(lower, upper string) (Filter, error)) *rangeEditor {
+func newRangeEditor(labels, placeholders, values [2]string, build func(lower, upper string) (filter.Filter, error)) *rangeEditor {
 	e := &rangeEditor{
 		labels: labels,
 		build:  build,
@@ -178,7 +179,7 @@ func (e *rangeEditor) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (e *rangeEditor) Filter() (Filter, error) {
+func (e *rangeEditor) Filter() (filter.Filter, error) {
 	return e.build(strings.TrimSpace(e.inputs[0].Value()), strings.TrimSpace(e.inputs[1].Value()))
 }
 
@@ -188,37 +189,37 @@ func (e *rangeEditor) Blur()          { e.inputs[e.active].Blur() }
 func (e *rangeEditor) View(focused bool, width int) []string {
 	lines := make([]string, 0, 3)
 	for i := range e.inputs {
-		label := shared.TextBodyStyle.Render(shared.Fit(e.labels[i], 10))
+		label := ui.TextBodyStyle.Render(ui.Fit(e.labels[i], 10))
 		if focused && i == e.active {
-			label = shared.AccentStyle.Render(shared.Fit(e.labels[i], 10))
+			label = ui.AccentStyle.Render(ui.Fit(e.labels[i], 10))
 		}
-		e.inputs[i].SetWidth(shared.Max(1, width-11))
+		e.inputs[i].SetWidth(ui.Max(1, width-11))
 		lines = append(lines, label+e.inputs[i].View())
 	}
 	if _, err := e.Filter(); err != nil {
-		lines = append(lines, shared.BadStyle.Render(err.Error()))
+		lines = append(lines, ui.BadStyle.Render(err.Error()))
 	}
 	return lines
 }
 
 func (e *rangeEditor) Keys() []key.Binding { return []key.Binding{e.next} }
 
-func newIntEditor(name string, current Filter) *rangeEditor {
+func newIntEditor(name string, current filter.Filter) *rangeEditor {
 	var values [2]string
-	if f, ok := current.(IntFilter); ok {
-		if f.From != NoMin {
+	if f, ok := current.(filter.IntFilter); ok {
+		if f.From != filter.NoMin {
 			values[0] = strconv.Itoa(f.From)
 		}
-		if f.To != NoMax {
+		if f.To != filter.NoMax {
 			values[1] = strconv.Itoa(f.To)
 		}
 	}
 	return newRangeEditor([2]string{"at least", "at most"}, [2]string{"no minimum", "no maximum"}, values,
-		func(lower, upper string) (Filter, error) {
+		func(lower, upper string) (filter.Filter, error) {
 			if lower == "" && upper == "" {
 				return nil, nil
 			}
-			from, to := NoMin, NoMax
+			from, to := filter.NoMin, filter.NoMax
 			var err error
 			if lower != "" {
 				if from, err = strconv.Atoi(lower); err != nil {
@@ -233,7 +234,7 @@ func newIntEditor(name string, current Filter) *rangeEditor {
 			if from > to {
 				return nil, errors.New("the minimum is above the maximum")
 			}
-			return NewIntFilter(name, from, to), nil
+			return filter.NewIntFilter(name, from, to), nil
 		})
 }
 
@@ -265,9 +266,9 @@ func parseDate(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("%q is not a date like 2024-06-30 or a time ago like 6m", s)
 }
 
-func newDateEditor(name string, current Filter) *rangeEditor {
+func newDateEditor(name string, current filter.Filter) *rangeEditor {
 	var values [2]string
-	if f, ok := current.(DateFilter); ok {
+	if f, ok := current.(filter.DateFilter); ok {
 		if !f.From.IsZero() {
 			values[0] = f.From.Format("2006-01-02")
 		}
@@ -277,7 +278,7 @@ func newDateEditor(name string, current Filter) *rangeEditor {
 	}
 	placeholder := "YYYY-MM-DD, or 30d, 6m, 1y ago"
 	return newRangeEditor([2]string{"after", "before"}, [2]string{placeholder, placeholder}, values,
-		func(lower, upper string) (Filter, error) {
+		func(lower, upper string) (filter.Filter, error) {
 			if lower == "" && upper == "" {
 				return nil, nil
 			}
@@ -296,7 +297,7 @@ func newDateEditor(name string, current Filter) *rangeEditor {
 			if !from.IsZero() && !to.IsZero() && from.After(to) {
 				return nil, errors.New("the start is after the end")
 			}
-			return NewDateFilter(name, from, to), nil
+			return filter.NewDateFilter(name, from, to), nil
 		})
 }
 
@@ -307,9 +308,9 @@ type textEditor struct {
 	input textinput.Model
 }
 
-func newTextEditor(name string, current Filter) *textEditor {
+func newTextEditor(name string, current filter.Filter) *textEditor {
 	value := ""
-	if f, ok := current.(StringFilter); ok {
+	if f, ok := current.(filter.StringFilter); ok {
 		value = f.Value()
 	}
 	return &textEditor{name: name, input: newInput("any text", value)}
@@ -321,22 +322,22 @@ func (e *textEditor) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (e *textEditor) Filter() (Filter, error) {
+func (e *textEditor) Filter() (filter.Filter, error) {
 	if strings.TrimSpace(e.input.Value()) == "" {
 		return nil, nil
 	}
-	return NewStringFilter(e.name, e.input.Value()), nil
+	return filter.NewStringFilter(e.name, e.input.Value()), nil
 }
 
 func (e *textEditor) Focus() tea.Cmd { return e.input.Focus() }
 func (e *textEditor) Blur()          { e.input.Blur() }
 
 func (e *textEditor) View(focused bool, width int) []string {
-	label := shared.TextBodyStyle.Render(shared.Fit("contains", 10))
+	label := ui.TextBodyStyle.Render(ui.Fit("contains", 10))
 	if focused {
-		label = shared.AccentStyle.Render(shared.Fit("contains", 10))
+		label = ui.AccentStyle.Render(ui.Fit("contains", 10))
 	}
-	e.input.SetWidth(shared.Max(1, width-11))
+	e.input.SetWidth(ui.Max(1, width-11))
 	return []string{label + e.input.View()}
 }
 
@@ -350,11 +351,11 @@ func newInput(placeholder, value string) textinput.Model {
 	input.CharLimit = 100
 	input.SetValue(value)
 	styles := textinput.DefaultStyles(true)
-	styles.Focused.Text = shared.ValueStyle
-	styles.Blurred.Text = shared.ValueStyle
-	styles.Focused.Placeholder = shared.DimStyle
-	styles.Blurred.Placeholder = shared.DimStyle
-	styles.Cursor.Color = shared.AppColors.Accent
+	styles.Focused.Text = ui.ValueStyle
+	styles.Blurred.Text = ui.ValueStyle
+	styles.Focused.Placeholder = ui.DimStyle
+	styles.Blurred.Placeholder = ui.DimStyle
+	styles.Cursor.Color = ui.AppColors.Accent
 	input.SetStyles(styles)
 	return input
 }
