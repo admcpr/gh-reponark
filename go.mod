@@ -1,6 +1,6 @@
 module gh-reponark
 
-go 1.25.0
+go 1.27
 
 require (
 	charm.land/bubbles/v2 v2.2.1
@@ -32,7 +32,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/sahilm/fuzzy v0.1.3 // indirect
 	github.com/thlib/go-timezone-local v0.0.8 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect

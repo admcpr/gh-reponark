@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -10,9 +11,22 @@ import (
 )
 
 func main() {
+	opts, err := parseArgs(os.Args[1:])
+	if errors.Is(err, errHelp) {
+		fmt.Println(usage)
+		return
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if opts.version {
+		printVersion()
+		return
+	}
+
 	var svc github.Service
-	if os.Getenv("REPONARK_DEMO") != "" {
-		// Demo mode runs against built-in sample data instead of GitHub.
+	if opts.demo {
 		svc = demoService()
 	} else {
 		client, err := github.NewClient()

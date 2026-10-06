@@ -1,15 +1,123 @@
-name: release
+name: Release
+
+# Every merge to main ships: CI runs, the next version is tagged, and the
+# extension's binaries are precompiled for every platform and attached to a
+# GitHub release. The bump is patch unless the merge commit asks for more:
+#   #minor, feat:            -> minor
+#   #major, feat!:, BREAKING -> major
+#   [skip release]           -> no release
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+
 permissions:
   contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    name: Tag and publish
+    needs: ci
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      # - uses: cli/gh-extension-precompile@v1
-      # TODO: let's make this work again once the refactor is complete
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Work out the next version
+        id: version
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          # Only full releases count; a pre-release tag such as v1.2.0-rc.1
+          # must not become the base of the next bump.
+          latest="$(git tag --list 'v*' --sort=-v:refname | grep -Ev -- '-' | head -n1)"
+          latest="${latest:-v0.0.0}"
+          IFS=. read -r major minor patch <<< "${latest#v}"
+          if echo "$MESSAGE" | grep -Eq '#major|^[a-z]+(\([^)]*\))?!:|BREAKING CHANGE'; then
+            major=$((major + 1)); minor=0; patch=0
+          elif echo "$MESSAGE" | grep -Eq '#minor|^feat(\([^)]*\))?:'; then
+            minor=$((minor + 1)); patch=0
+          else
+            patch=$((patch + 1))
+          fi
+          tag="v$major.$minor.$patch"
+          echo "previous=$latest" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag (previous $latest)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Push the tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Build and publish the extension
+        uses: cli/gh-extension-precompile@v2
+        with:
+          go_version_file: go.mod
+          release_tag: ${{ steps.version.outputs.tag }}
+          generate_attestations: true
+          # Stamp the tag into `gh reponark --version` (the action's own
+          # ldflags are only -s -w, which this keeps).
+          go_build_options: -ldflags=-s -w -X main.version=${{ steps.version.outputs.tag }}
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+
+  smoke:
+    name: Install from the release
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.release.outputs.tag }}
+    steps:
+      - name: gh extension install
+        run: |
+          gh extension install "$GITHUB_REPOSITORY" --pin "$TAG"
+          got="$(gh reponark --version)"
+          echo "$got" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$got" = "gh-reponark $TAG" ]
+
+  # The recording is only re-made when something it shows changed, so the
+  # repository does not gain a new 2 MB GIF with every release.
+  demo-needed:
+    name: Did the UI change?
+    needs: release
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - id: check
+        run: |
+          if git diff --quiet HEAD~1 HEAD -- demo.tape demo.go app.go ui inspector repos accounts filters; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  demo:
+    name: Refresh the README recording
+    needs: demo-needed
+    if: needs.demo-needed.outputs.changed == 'true'
+    uses: ./.github/workflows/demo.yml
+    permissions:
+      contents: write

@@ -1,0 +1,49 @@
+name: Demo
+
+# Re-records demo.gif from demo.tape against the built-in demo data and
+# commits it. Called by the release workflow after each release; run it by
+# hand from the Actions tab to refresh the README's recording at any time.
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: demo
+  cancel-in-progress: true
+
+jobs:
+  record:
+    name: Record demo.gif
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Build and put `gh reponark` on the PATH
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          go build -trimpath -o "$RUNNER_TEMP/bin/gh-reponark" .
+          # The tape types `gh reponark`; a tiny shim stands in for the gh CLI.
+          printf '#!/bin/sh\nshift\nexec "%s/gh-reponark" "$@"\n' "$RUNNER_TEMP/bin" > "$RUNNER_TEMP/bin/gh"
+          chmod +x "$RUNNER_TEMP/bin/gh"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo.tape
+          install-fonts: true
+      - name: Commit the recording
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add demo.gif
+          if git diff --cached --quiet; then
+            echo "demo.gif unchanged"; exit 0
+          fi
+          git commit -m "docs: refresh demo.gif [skip ci]"
+          git push origin HEAD:main
