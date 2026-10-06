@@ -1,6 +1,6 @@
 # gh-reponark
 
-![gh-reponark demo tour](demo.gif)
+![gh-reponark demo tour](https://github.com/admcpr/gh-reponark/releases/latest/download/demo.gif)
 
 ## What is this?
 
@@ -64,7 +64,7 @@ CAPTURE_DIR=captures go test -tags capture -run TestCapture ./...
 ```
 This writes `<width>x<height>-<screen>.ans` (with colour) and `.txt` files you can diff or render.
 
-`demo.gif` is recorded from `demo.tape` with [VHS](https://github.com/charmbracelet/vhs); the release workflow refreshes it when the UI changes, or run the "Demo" workflow by hand.
+The demo recording at the top of this file is made from `demo.tape` with [VHS](https://github.com/charmbracelet/vhs) by the release workflow and attached to each release (nothing is committed); run the "Demo" workflow by hand to re-record it for the latest release. Locally: put a `gh` shim that runs the built binary on the PATH and run `vhs demo.tape`.
 
 Merging to `main` publishes a release: the version bumps the patch number unless the merge commit says `#minor` / `feat:` or `#major` / `feat!:`; `[skip release]` skips it.
 

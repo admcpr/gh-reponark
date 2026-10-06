@@ -26,3 +26,6 @@ gh-reponark-demo-*
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# Recorded by the release workflow and attached to releases, not committed
+/demo.gif

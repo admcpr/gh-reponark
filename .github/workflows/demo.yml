@@ -1,11 +1,22 @@
 name: Demo
 
-# Re-records demo.gif from demo.tape against the built-in demo data and
-# commits it. Called by the release workflow after each release; run it by
-# hand from the Actions tab to refresh the README's recording at any time.
+# Records demo.gif from demo.tape against the built-in demo data and attaches
+# it to a release, where the README loads it from
+# releases/latest/download/demo.gif. Nothing is committed, so this works with
+# a protected main branch. The release workflow calls it after publishing;
+# run it by hand from the Actions tab to refresh the latest release's GIF.
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release to attach the recording to (defaults to the latest)
+        required: false
+        type: string
   workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,19 +27,30 @@ concurrency:
 
 jobs:
   record:
-    name: Record demo.gif
+    name: Record and attach demo.gif
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Pick the release
+        id: release
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ -z "$TAG" ]; then
+            TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ steps.release.outputs.tag }}
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Build and put `gh reponark` on the PATH
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
-          go build -trimpath -o "$RUNNER_TEMP/bin/gh-reponark" .
+          go build -trimpath -ldflags="-s -w -X main.version=${{ steps.release.outputs.tag }}" -o "$RUNNER_TEMP/bin/gh-reponark" .
           # The tape types `gh reponark`; a tiny shim stands in for the gh CLI.
           printf '#!/bin/sh\nshift\nexec "%s/gh-reponark" "$@"\n' "$RUNNER_TEMP/bin" > "$RUNNER_TEMP/bin/gh"
           chmod +x "$RUNNER_TEMP/bin/gh"
@@ -37,13 +59,5 @@ jobs:
         with:
           path: demo.tape
           install-fonts: true
-      - name: Commit the recording
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add demo.gif
-          if git diff --cached --quiet; then
-            echo "demo.gif unchanged"; exit 0
-          fi
-          git commit -m "docs: refresh demo.gif [skip ci]"
-          git push origin HEAD:main
+      - name: Attach to the release
+        run: gh release upload "${{ steps.release.outputs.tag }}" demo.gif --clobber --repo "$GITHUB_REPOSITORY"
