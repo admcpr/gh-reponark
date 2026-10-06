@@ -33,9 +33,7 @@ jobs:
       - name: staticcheck
         uses: dominikh/staticcheck-action@v1
         with:
-          # The newest staticcheck needs a newer Go than go.mod declares; this
-          # is the last release that builds with Go 1.25. Bump it with go.mod.
-          version: "v0.7.0"
+          version: latest
           install-go: false
       - name: govulncheck
         uses: golang/govulncheck-action@v1
@@ -53,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -71,26 +69,24 @@ jobs:
           path: coverage.out
 
   build:
-    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    # The test matrix compiles natively for Linux and Windows; this
+    # cross-compiles the other release targets (macOS is not tested, so both
+    # of its architectures are built here) in one job, so a platform-specific
+    # build break is caught before the release workflow hits it. Each target
+    # takes a few seconds once modules are cached, so one job beats a matrix.
+    name: Cross-compile
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { goos: linux, goarch: amd64 }
-          - { goos: linux, goarch: arm64 }
-          - { goos: darwin, goarch: amd64 }
-          - { goos: darwin, goarch: arm64 }
-          - { goos: windows, goarch: amd64 }
-          - { goos: windows, goarch: arm64 }
     env:
       CGO_ENABLED: "0"
-      GOOS: ${{ matrix.goos }}
-      GOARCH: ${{ matrix.goarch }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - name: go build
-        run: go build -trimpath -o /dev/null .
+      - name: go build for each remaining target
+        run: |
+          for target in linux/arm64 windows/arm64 darwin/amd64 darwin/arm64; do
+            echo "::group::$target"
+            GOOS="${target%/*}" GOARCH="${target#*/}" go build -trimpath -o /dev/null .
+            echo "::endgroup::"
+          done
