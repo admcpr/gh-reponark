@@ -51,8 +51,18 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
           go build -trimpath -ldflags="-s -w -X main.version=${{ steps.release.outputs.tag }}" -o "$RUNNER_TEMP/bin/gh-reponark" .
-          # The tape types `gh reponark`; a tiny shim stands in for the gh CLI.
-          printf '#!/bin/sh\nshift\nexec "%s/gh-reponark" "$@"\n' "$RUNNER_TEMP/bin" > "$RUNNER_TEMP/bin/gh"
+          # The tape types `gh reponark`, so a shim named gh runs the build for
+          # that and hands everything else to the real gh CLI, which later
+          # steps (the release upload) still need.
+          real_gh="$(command -v gh)"
+          cat > "$RUNNER_TEMP/bin/gh" <<SHIM
+          #!/bin/sh
+          if [ "\$1" = reponark ]; then
+            shift
+            exec "$RUNNER_TEMP/bin/gh-reponark" "\$@"
+          fi
+          exec "$real_gh" "\$@"
+          SHIM
           chmod +x "$RUNNER_TEMP/bin/gh"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - uses: charmbracelet/vhs-action@v2
