@@ -1,6 +1,7 @@
 # A tour of gh-reponark against its built-in demo data, recorded with VHS
-# (https://github.com/charmbracelet/vhs). The release workflow renders this
-# to demo.gif; locally: put a `gh` that runs the built binary on the PATH and run vhs demo.tape
+# (https://github.com/charmbracelet/vhs). The release workflow records it and
+# attaches demo.gif to the release; locally, put a `gh` that runs the built
+# binary on the PATH and run `vhs demo.tape`.
 
 Output demo.gif
 

@@ -94,30 +94,11 @@ jobs:
           echo "$got" | tee -a "$GITHUB_STEP_SUMMARY"
           [ "$got" = "gh-reponark $TAG" ]
 
-  # The recording is only re-made when something it shows changed, so the
-  # repository does not gain a new 2 MB GIF with every release.
-  demo-needed:
-    name: Did the UI change?
-    needs: release
-    runs-on: ubuntu-latest
-    outputs:
-      changed: ${{ steps.check.outputs.changed }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
-      - id: check
-        run: |
-          if git diff --quiet HEAD~1 HEAD -- demo.tape demo.go app.go ui inspector repos accounts filters; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
   demo:
-    name: Refresh the README recording
-    needs: demo-needed
-    if: needs.demo-needed.outputs.changed == 'true'
+    name: Record the README demo
+    needs: release
     uses: ./.github/workflows/demo.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
     permissions:
       contents: write
