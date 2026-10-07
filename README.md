@@ -68,5 +68,17 @@ The demo recording at the top of this file is made from `demo.tape` with [VHS](h
 
 Merging to `main` publishes a release: the version bumps the patch number unless the merge commit says `#minor` / `feat:` or `#major` / `feat!:`; `[skip release]` skips it.
 
-## Thanks
-Built using [Bubble Tea](https://charm.land/bubbletea), [Bubbles](https://charm.land/bubbles), and [Lip Gloss](https://charm.land/lipgloss) from [Charm](https://charm.land).
+## Built with
+
+gh-reponark is built on [Charm](https://charm.land)'s terminal libraries:
+
+- [Bubble Tea](https://github.com/charmbracelet/bubbletea) A powerful little TUI framework 🏗
+- [Lip Gloss](https://github.com/charmbracelet/lipgloss) Style definitions for nice terminal layouts 👄
+- [Bubbles](https://github.com/charmbracelet/bubbles) TUI components for Bubble Tea 🫧
+- [VHS](https://github.com/charmbracelet/vhs) Records the demo gif from [`demo.tape`](demo.tape).
+
+GitHub CLI access goes through [go-gh](https://github.com/cli/go-gh).
+
+## License
+
+[MIT](LICENSE)
