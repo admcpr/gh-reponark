@@ -1,6 +1,9 @@
 package ui
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 func Half(width int) int {
 	return int(math.Floor(float64(width) / 2.0))
@@ -32,3 +35,22 @@ func Plural(n int, one, many string) string {
 	}
 	return many
 }
+
+// AgoDays describes a number of days ago compactly, e.g. "today", "3d ago",
+// "4mo ago" or "2y ago".
+func AgoDays(days int) string {
+	switch {
+	case days < 1:
+		return "today"
+	case days < 30:
+		return fmt.Sprintf("%dd ago", days)
+	case days < 365:
+		return fmt.Sprintf("%dmo ago", days/30)
+	default:
+		return fmt.Sprintf("%dy ago", days/365)
+	}
+}
+
+// Sparks are the bar glyphs from lowest to full, for sparklines and
+// histograms.
+var Sparks = []rune("▁▂▃▄▅▆▇█")

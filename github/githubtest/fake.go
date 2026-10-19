@@ -21,6 +21,12 @@ type GetCall struct {
 	Names []string
 }
 
+// OwnerCall records the arguments of a GetOwner call.
+type OwnerCall struct {
+	Login  string
+	IsUser bool
+}
+
 // Fake is a github.Service backed by fixed data. Set the *Err fields to make
 // the corresponding method fail. Every call is recorded so tests can assert on
 // what the UI asked for. Use it via a pointer so the recorded calls are kept.
@@ -37,8 +43,15 @@ type Fake struct {
 	ListErr      error
 	GetErr       error
 
-	ListCalls []ListCall
-	GetCalls  []GetCall
+	// Owners back GetOwner by login. A login not among them is described
+	// from User and its Organizations, so a test that only sets those still
+	// gets a profile.
+	Owners   []github.Owner
+	OwnerErr error
+
+	ListCalls  []ListCall
+	GetCalls   []GetCall
+	OwnerCalls []OwnerCall
 }
 
 var _ github.Service = (*Fake)(nil)
@@ -99,4 +112,33 @@ func (f *Fake) GetRepositories(owner string, names []string) ([]repo.Repository,
 		}
 	}
 	return repositories, nil
+}
+
+func (f *Fake) GetOwner(login string, isUser bool) (github.Owner, error) {
+	f.OwnerCalls = append(f.OwnerCalls, OwnerCall{Login: login, IsUser: isUser})
+	if f.OwnerErr != nil {
+		return github.Owner{}, f.OwnerErr
+	}
+	for _, owner := range f.Owners {
+		if owner.Login == login {
+			return owner, nil
+		}
+	}
+	if isUser {
+		u := f.User
+		return github.Owner{
+			Login: u.Login, Name: u.Name, Description: u.Description, Url: u.Url, IsUser: true,
+			Members: u.Members, CreatedAt: u.CreatedAt,
+		}, nil
+	}
+	for _, org := range f.User.Organizations {
+		if org.Login == login {
+			return github.Owner{
+				Login: org.Login, Name: org.Name, Description: org.Description, Url: org.Url,
+				IsVerified: org.IsVerified, ViewerIsAMember: true, ViewerCanAdminister: org.ViewerCanAdminister,
+				Members: org.Members, CreatedAt: org.CreatedAt,
+			}, nil
+		}
+	}
+	return github.Owner{Login: login, IsUser: isUser}, nil
 }

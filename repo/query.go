@@ -113,7 +113,13 @@ type Repository struct {
 	SquashMergeCommitMessage string `graphql:"squashMergeCommitMessage" group:"5⟭ Merge" desc:"How the default message of a squash merge commit is generated."`
 	DefaultBranchRef         struct {
 		Name string `name:"Default Branch" group:"5⟭ Merge" desc:"The name of the default branch for this repository."`
-		// BranchProtectionRule BranchProtectionRule `graphql:"branchProtectionRule"`
+		// The rules that apply to the default branch, from active rulesets
+		// and from classic branch protection, read into the Branch rules
+		// group by BranchRuleProperties rather than shown as they are.
+		Rules struct {
+			Nodes []BranchRule `graphql:"nodes"`
+		} `graphql:"rules(first: 100)" property:"-"`
+		Classic ClassicRule `graphql:"refUpdateRule" property:"-"`
 	} `graphql:"defaultBranchRef"`
 
 	// Branch Protection
@@ -123,14 +129,19 @@ type Repository struct {
 	IsSecurityPolicyEnabled bool   `graphql:"isSecurityPolicyEnabled" group:"6⟭ Security" desc:"Whether this repository has a security policy."`
 	SecurityPolicyURL       string `graphql:"securityPolicyUrl" group:"6⟭ Security" desc:"The URL for the security policy of this repository."`
 	VulnerabilityAlerts     struct {
-		TotalCount int `name:"Vulnerability Alerts" group:"6⟭ Security" desc:"The number of vulnerability alerts for this repository."`
-	} `graphql:"vulnerabilityAlerts"`
+		TotalCount int `name:"Vulnerability Alerts" group:"6⟭ Security" desc:"The number of open vulnerability alerts for this repository, not counting fixed or dismissed ones."`
+	} `graphql:"vulnerabilityAlerts(states: OPEN)"`
 	BranchProtectionRuleCount struct {
 		TotalCount int `name:"Branch Protection Rules" group:"6⟭ Security" desc:"The number of branch protection rules for this repository."`
 	} `graphql:"branchProtectionRules"`
 	Rulesets struct {
 		TotalCount int `name:"Rulesets" group:"6⟭ Security" desc:"The number of rulesets for this repository, including ones inherited from the organization."`
-	} `graphql:"rulesets(includeParents: true)"`
+		// Nodes give each ruleset's enforcement, for counting the ones in
+		// evaluate mode, which report but do not enforce.
+		Nodes []struct {
+			Enforcement string `graphql:"enforcement"`
+		} `graphql:"nodes"`
+	} `graphql:"rulesets(includeParents: true, first: 100)"`
 
 	// Permissions and Access
 	ViewerPermission        string `graphql:"viewerPermission" group:"6⟭ Permissions" desc:"The current user's permission level on the repository (READ, WRITE, ADMIN)."`

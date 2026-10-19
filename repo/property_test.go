@@ -18,14 +18,15 @@ func TestToProperties(t *testing.T) {
 
 	properties := ToProperties(repo)
 
-	if len(properties) != 78 {
-		t.Fatalf("expected 78 properties, got %d", len(properties))
+	// 78 from the struct and 18 derived Branch rules.
+	if len(properties) != 96 {
+		t.Fatalf("expected 96 properties, got %d", len(properties))
 	}
 }
 
 func TestNewRepoConfig(t *testing.T) {
-	expectedPropertyCount := 78
-	expectedPropertyGroupCount := 7
+	expectedPropertyCount := 96
+	expectedPropertyGroupCount := 8
 
 	repo := Repository{
 		Id:            "123",
@@ -58,6 +59,7 @@ func TestNewRepoConfig_GroupKeysAreSorted(t *testing.T) {
 		"5⟭ Merge",
 		"6⟭ Permissions",
 		"6⟭ Security",
+		"7⟭ Branch rules",
 	}
 	assert.Equal(t, want, repoConfig.GroupKeys)
 

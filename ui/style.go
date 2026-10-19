@@ -103,8 +103,12 @@ var (
 	LinkTextStyle  = lipgloss.NewStyle().Foreground(AppColors.Link)
 	LinkStyle      = LinkTextStyle.Underline(true)
 	FocusCellStyle = lipgloss.NewStyle().Foreground(AppColors.Background).Background(AppColors.Accent)
-	ColumnHeading  = DimStyle.Bold(true)
-	TextBodyStyle  = lipgloss.NewStyle().Foreground(AppColors.Foreground)
+	// FocusSparkStyle picks out the focused column or segment of a chart,
+	// and FocusLabelStyle its label: reversed, so it shows without colour.
+	FocusSparkStyle = lipgloss.NewStyle().Foreground(AppColors.Pink)
+	FocusLabelStyle = lipgloss.NewStyle().Foreground(AppColors.Accent).Bold(true).Reverse(true)
+	ColumnHeading   = DimStyle.Bold(true)
+	TextBodyStyle   = lipgloss.NewStyle().Foreground(AppColors.Foreground)
 	// TrackStyle draws the empty part of a bar: structure, never text.
 	TrackStyle = lipgloss.NewStyle().Foreground(AppColors.BrightBlack)
 

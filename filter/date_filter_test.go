@@ -106,6 +106,15 @@ func (s *DateFilterSuite) TestMatches() {
 	}
 }
 
+func TestDateFilter_UnsetDates(t *testing.T) {
+	unset := repo.RepoProperty{Type: "time.Time", Value: time.Time{}}
+	cutoff := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	assert.False(t, NewDateFilter("Pushed At", time.Time{}, cutoff).Matches(unset), "an unset date is not before the cutoff")
+	assert.False(t, NewDateFilter("Pushed At", cutoff, time.Time{}).Matches(unset), "nor after it")
+	assert.True(t, NewDateFilter("Pushed At", time.Time{}, time.Time{}).Matches(unset), "a filter open at both ends keeps everything")
+}
+
 func TestDateFilterSuite(t *testing.T) {
 	suite.Run(t, new(DateFilterSuite))
 }

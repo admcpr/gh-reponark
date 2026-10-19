@@ -55,5 +55,5 @@ func repositoryProperties(r Repository) []RepoProperty {
 		properties = append(properties, processField(t.Field(i), v.Field(i))...)
 	}
 
-	return properties
+	return append(properties, BranchRuleProperties(r)...)
 }

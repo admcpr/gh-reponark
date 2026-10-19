@@ -116,3 +116,26 @@ func TestStringFilterSuite(t *testing.T) {
 func TestStringFilter_Condition(t *testing.T) {
 	assert.Equal(t, `contains "go"`, NewStringFilter("Primary Language", "go").Condition())
 }
+
+func TestExactStringFilter(t *testing.T) {
+	f := NewExactStringFilter("Primary Language", "Java")
+
+	assert.Equal(t, "Primary Language", f.Name())
+	assert.Equal(t, "Java", f.Value())
+	assert.True(t, f.Matches(repo.RepoProperty{Value: "Java"}))
+	assert.False(t, f.Matches(repo.RepoProperty{Value: "JavaScript"}), "no substring match")
+	assert.False(t, f.Matches(repo.RepoProperty{Value: "java"}), "case matters")
+	assert.Equal(t, `is "Java"`, f.Condition())
+
+	var repos []repo.RepoConfig
+	for name, language := range map[string]string{"a": "Java", "b": "JavaScript"} {
+		r := repo.Repository{Name: name}
+		r.PrimaryLanguage.Name = language
+		repos = append(repos, repo.NewRepoConfig(r))
+	}
+	kept := FilterMap{f.Name(): f}.FilterRepos(repos)
+	assert.Len(t, kept, 1)
+	assert.Equal(t, "a", kept[0].Name)
+	assert.Len(t, FilterMap{f.Name(): NewStringFilter("Primary Language", "java")}.FilterRepos(repos), 2,
+		"the substring filter is unchanged")
+}

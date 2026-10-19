@@ -395,3 +395,15 @@ func TestIsSupportedPropertyType(t *testing.T) {
 	}
 	assert.False(t, isSupportedPropertyType("[]string"))
 }
+
+func TestNewModel_StartsOnTheFirstActiveFilter(t *testing.T) {
+	m := NewModel(filter.FilterMap{"Is Archived": filter.NewBoolFilter("Is Archived", false)}, nil, 80, 24)
+
+	p, ok := m.selected()
+	assert.True(t, ok)
+	assert.Equal(t, "Is Archived", p.Name)
+
+	m = NewModel(nil, nil, 80, 24)
+	p, _ = m.selected()
+	assert.Equal(t, m.properties[0].Name, p.Name, "without filters the cursor starts at the top")
+}

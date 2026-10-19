@@ -1,10 +1,11 @@
 name: Demo
 
-# Records demo.gif from demo.tape against the built-in demo data and attaches
-# it to a release, where the README loads it from
-# releases/latest/download/demo.gif. Nothing is committed, so this works with
-# a protected main branch. The release workflow calls it after publishing;
-# run it by hand from the Actions tab to refresh the latest release's GIF.
+# Records demo.gif from demo.tape and a still of each view from
+# screenshots.tape against the built-in demo data, and attaches them to a
+# release, where the README loads them from releases/latest/download/.
+# Nothing is committed, so this works with a protected main branch. The
+# release workflow calls it after publishing; run it by hand from the
+# Actions tab to refresh the latest release's images.
 on:
   workflow_dispatch:
     inputs:
@@ -27,7 +28,7 @@ concurrency:
 
 jobs:
   record:
-    name: Record and attach demo.gif
+    name: Record and attach the demo and screenshots
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -69,5 +70,9 @@ jobs:
         with:
           path: demo.tape
           install-fonts: true
+      - uses: charmbracelet/vhs-action@v2
+        with:
+          path: screenshots.tape
       - name: Attach to the release
-        run: gh release upload "${{ steps.release.outputs.tag }}" demo.gif --clobber --repo "$GITHUB_REPOSITORY"
+        run: |
+          gh release upload "${{ steps.release.outputs.tag }}" demo.gif view-*.png --clobber --repo "$GITHUB_REPOSITORY"

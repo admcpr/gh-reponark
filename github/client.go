@@ -88,6 +88,59 @@ func (c *Client) CurrentUser() (User, error) {
 	return user, nil
 }
 
+// GetOwner fetches the profile of an organization or user by login.
+func (c *Client) GetOwner(login string, isUser bool) (Owner, error) {
+	variables := map[string]interface{}{"login": graphql.String(login)}
+	if isUser {
+		var query userProfileQuery
+		if err := c.graphql.Query("UserProfile", &query, variables); err != nil {
+			return Owner{}, fmt.Errorf("fetching user %s: %w", login, err)
+		}
+		u := query.User
+		owner := ownerFromProfile(u.ownerProfile)
+		owner.IsUser = true
+		owner.Description = u.Bio
+		owner.Company = u.Company
+		owner.ViewerCanCreateProjects = u.ViewerCanCreateProjects
+		owner.Members = u.Followers.TotalCount
+		owner.Following = u.Following.TotalCount
+		return owner, nil
+	}
+
+	var query organizationProfileQuery
+	if err := c.graphql.Query("OrganizationProfile", &query, variables); err != nil {
+		return Owner{}, fmt.Errorf("fetching organization %s: %w", login, err)
+	}
+	o := query.Organization
+	owner := ownerFromProfile(o.ownerProfile)
+	owner.Description = o.Description
+	owner.IsVerified = o.IsVerified
+	owner.ViewerIsAMember = o.ViewerIsAMember
+	owner.ViewerCanAdminister = o.ViewerCanAdminister
+	owner.ViewerCanCreateRepositories = o.ViewerCanCreateRepositories
+	owner.ViewerCanCreateTeams = o.ViewerCanCreateTeams
+	owner.ViewerCanCreateProjects = o.ViewerCanCreateProjects
+	owner.Members = o.MembersWithRole.TotalCount
+	owner.Teams = o.Teams.TotalCount
+	return owner, nil
+}
+
+// ownerFromProfile copies the fields organizations and users share.
+func ownerFromProfile(p ownerProfile) Owner {
+	return Owner{
+		Login:              p.Login,
+		Name:               p.Name,
+		Url:                p.Url,
+		WebsiteUrl:         p.WebsiteUrl,
+		Location:           p.Location,
+		Email:              p.Email,
+		TwitterUsername:    p.TwitterUsername,
+		HasSponsorsListing: p.HasSponsorsListing,
+		CreatedAt:          p.CreatedAt,
+		Pinned:             p.pinned(),
+	}
+}
+
 func (c *Client) ListRepositories(login string, isUser bool, after string) (RepositoryPage, error) {
 	// A nil cursor asks for the first page; GraphQL treats it as null.
 	var cursor *graphql.String

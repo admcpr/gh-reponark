@@ -35,8 +35,8 @@ type Stats struct {
 // histogramBuckets is how many columns an int distribution is drawn with.
 const histogramBuckets = 10
 
-// sparkline glyphs from empty to full.
-var sparks = []rune("▁▂▃▄▅▆▇█")
+// sparks are the sparkline glyphs from empty to full.
+var sparks = ui.Sparks
 
 // Sparkline colours: the histogram's bars, and the bucket holding the
 // inspected value. Empty buckets keep a baseline in ui.TrackStyle.

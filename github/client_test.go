@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"gh-reponark/repo"
+
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -412,4 +414,134 @@ func TestClient_GetRepositories_Error(t *testing.T) {
 func TestClient_ImplementsService(t *testing.T) {
 	var svc Service = &Client{}
 	assert.NotNil(t, svc)
+}
+
+func TestClient_GetOwner_Organization(t *testing.T) {
+	client, transport := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
+		if !isOperation(gql, "OrganizationProfile") {
+			return http.StatusNotFound, `{"message":"unexpected request"}`
+		}
+		return http.StatusOK, `{"data":{"organization":{
+			"login":"acme","name":"Acme","url":"https://github.com/acme",
+			"websiteUrl":"https://acme.example.com","location":"Springfield",
+			"email":"hello@acme.example.com","twitterUsername":"acme",
+			"hasSponsorsListing":true,"createdAt":"2015-03-04T05:06:07Z",
+			"pinnedItems":{"nodes":[{"name":"anvil"},{"name":"rocket"}]},
+			"description":"Anvils","isVerified":true,"viewerIsAMember":true,
+			"viewerCanAdminister":false,"viewerCanCreateRepositories":true,
+			"viewerCanCreateTeams":false,"viewerCanCreateProjects":true,
+			"membersWithRole":{"totalCount":18},"teams":{"totalCount":5}}}}`
+	})
+
+	owner, err := client.GetOwner("acme", false)
+
+	require.NoError(t, err)
+	assert.Equal(t, Owner{
+		Login: "acme", Name: "Acme", Description: "Anvils", Url: "https://github.com/acme",
+		WebsiteUrl: "https://acme.example.com", Location: "Springfield",
+		Email: "hello@acme.example.com", TwitterUsername: "acme",
+		IsVerified: true, ViewerIsAMember: true,
+		ViewerCanCreateRepositories: true, ViewerCanCreateProjects: true,
+		HasSponsorsListing: true,
+		CreatedAt:          time.Date(2015, 3, 4, 5, 6, 7, 0, time.UTC),
+		Members:            18, Teams: 5,
+		Pinned: []string{"anvil", "rocket"},
+	}, owner)
+
+	require.Len(t, transport.graphql, 1)
+	query := transport.graphql[0]
+	assert.Equal(t, "acme", query.Variables["login"])
+	assert.NotContains(t, query.Query, "repositories", "repository counts come from the loaded repositories")
+	assert.Contains(t, query.Query, "pinnedItems(first: 6, types: REPOSITORY){nodes{... on Repository{name}}}")
+	assert.NotContains(t, query.Query, "requiresTwoFactorAuthentication", "owner-only settings would fail the query for members")
+}
+
+func TestClient_GetOwner_User(t *testing.T) {
+	client, transport := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
+		if !isOperation(gql, "UserProfile") {
+			return http.StatusNotFound, `{"message":"unexpected request"}`
+		}
+		return http.StatusOK, `{"data":{"user":{
+			"login":"octocat","name":"The Octocat","url":"https://github.com/octocat",
+			"createdAt":"2011-01-25T18:44:36Z",
+			"pinnedItems":{"nodes":[]},
+			"bio":"Mascot","company":"GitHub","viewerCanCreateProjects":true,
+			"followers":{"totalCount":9000},"following":{"totalCount":9}}}}`
+	})
+
+	owner, err := client.GetOwner("octocat", true)
+
+	require.NoError(t, err)
+	assert.Equal(t, Owner{
+		Login: "octocat", Name: "The Octocat", Description: "Mascot", Url: "https://github.com/octocat",
+		Company: "GitHub", IsUser: true, ViewerCanCreateProjects: true,
+		CreatedAt: time.Date(2011, 1, 25, 18, 44, 36, 0, time.UTC),
+		Members:   9000, Following: 9,
+	}, owner)
+	require.Len(t, transport.graphql, 1)
+	assert.Contains(t, transport.graphql[0].Query, "user(login: $login){")
+}
+
+func TestClient_GetOwner_Error(t *testing.T) {
+	client, _ := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
+		return http.StatusOK, graphqlError("Could not resolve to an Organization with the login of 'nope'.")
+	})
+
+	_, err := client.GetOwner("nope", false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fetching organization nope")
+	assert.Contains(t, err.Error(), "Could not resolve")
+}
+
+func TestClient_GetRepositories_BranchRules(t *testing.T) {
+	// The shape GitHub returned for a public repository the viewer can only
+	// read: an organization ruleset, a repository ruleset, classic
+	// protection, and a ruleset in evaluate mode.
+	client, transport := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
+		return http.StatusOK, `{"data":{"repo0":{"name":"editor","defaultBranchRef":{"name":"main",
+			"rules":{"nodes":[
+				{"type":"COPILOT_CODE_REVIEW","parameters":null,"repositoryRuleset":{"name":"Copilot Reviews","source":{"__typename":"Repository"}}},
+				{"type":"PULL_REQUEST","parameters":{"requiredApprovingReviewCount":1},"repositoryRuleset":{"name":"production","source":{"__typename":"Organization"}}},
+				{"type":"NON_FAST_FORWARD","parameters":null,"repositoryRuleset":{"name":"production","source":{"__typename":"Organization"}}}
+			]},
+			"refUpdateRule":{"pattern":"main","allowsDeletions":false,"allowsForcePushes":false,"requiredApprovingReviewCount":2,
+				"requiredStatusCheckContexts":["build"],"requiresLinearHistory":false,"requiresSignatures":false}},
+			"rulesets":{"totalCount":2,"nodes":[{"enforcement":"ACTIVE"},{"enforcement":"EVALUATE"}]}}}}`
+	})
+
+	repositories, err := client.GetRepositories("acme", []string{"editor"})
+
+	require.NoError(t, err)
+	properties := repo.ToProperties(repositories[0])
+	assert.Equal(t, true, properties["Pull Request Rule"].Value)
+	assert.Equal(t, 2, properties["Required Approvals"].Value, "the stricter of the ruleset and classic protection")
+	assert.Equal(t, true, properties["Status Checks Rule"].Value, "from classic protection")
+	assert.Equal(t, true, properties["Copilot Review Rule"].Value)
+	assert.Equal(t, true, properties["Deletion Blocked"].Value, "classic protection does not allow deletion")
+	assert.Equal(t, "classic + repository + organization", properties["Rule Sources"].Value)
+	assert.Equal(t, "Copilot Reviews, production", properties["Rulesets Applied"].Value)
+	assert.Equal(t, 1, properties["Evaluate Rulesets"].Value)
+	assert.Equal(t, 2, properties["Rulesets"].Value, "the existing count is unchanged")
+
+	query := transport.graphql[0].Query
+	assert.Contains(t, query, "rules(first: 100){nodes{type,parameters{... on PullRequestParameters{requiredApprovingReviewCount}}")
+	assert.Contains(t, query, "source{__typename}", "only the kind of source, which needs no extra scope")
+	assert.Contains(t, query, "refUpdateRule{pattern,")
+	assert.Contains(t, query, "rulesets(includeParents: true, first: 100){totalCount,nodes{enforcement}}")
+}
+
+func TestClient_GetRepositories_NoBranchRules(t *testing.T) {
+	client, _ := newTestClient(t, func(req *http.Request, gql *graphqlRequest) (int, string) {
+		return http.StatusOK, `{"data":{"repo0":{"name":"plain","defaultBranchRef":{"name":"main","rules":{"nodes":[]},"refUpdateRule":null},
+			"rulesets":{"totalCount":0,"nodes":[]}}}}`
+	})
+
+	repositories, err := client.GetRepositories("acme", []string{"plain"})
+
+	require.NoError(t, err)
+	properties := repo.ToProperties(repositories[0])
+	assert.Equal(t, false, properties["Pull Request Rule"].Value)
+	assert.Equal(t, false, properties["Force Pushes Blocked"].Value, "no classic rule means nothing is blocked")
+	assert.Equal(t, "", properties["Rule Sources"].Value)
 }

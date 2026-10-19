@@ -21,13 +21,40 @@ func (m Model) Help() ui.Help {
 	groups := []key.Binding{repoKeys.NextTab, repoKeys.PrevTab}
 
 	switch {
+	case m.mode == overviewView:
+		// The focused card names what j/k steps through, e.g. "language".
+		noun := m.rowNoun()
+		return ui.Help{
+			Short: []key.Binding{
+				ui.Combine("tab", "card", repoKeys.NextTab, repoKeys.PrevTab),
+				ui.Combine("j/k", noun, m.keymap.Down, m.keymap.Up),
+				ui.WithHelp(m.keymap.Inspect, "show repos"),
+				ui.WithHelp(m.keymap.ToggleView, "list"),
+				filters,
+				m.keymap.Back,
+			},
+			Full: [][]key.Binding{
+				append([]key.Binding{
+					ui.WithHelp(repoKeys.NextTab, "next card"),
+					ui.WithHelp(repoKeys.PrevTab, "previous card"),
+					ui.WithHelp(m.keymap.Left, "card left"),
+					ui.WithHelp(m.keymap.Right, "card right"),
+				}, paging...),
+				{ui.WithHelp(m.keymap.Down, "next "+noun), ui.WithHelp(m.keymap.Up, "previous "+noun), ui.WithHelp(m.keymap.Inspect, "show the "+noun+"'s repos"), ui.WithHelp(m.keymap.ToggleView, "list view")},
+				{filters, m.keymap.Back},
+			},
+		}
+
 	case m.mode == matrixView:
 		return ui.Help{
 			Short: []key.Binding{
-				ui.Combine("hjkl", "move", m.keymap.Left, m.keymap.Down, m.keymap.Up, m.keymap.Right),
-				ui.WithHelp(m.keymap.Inspect, "inspect"),
+				// Like every view: j/k names what moves up and down, h/l is
+				// listed apart, and enter, which there is no room for at 80
+				// columns, is in the full help.
+				ui.Combine("j/k", "repo", m.keymap.Down, m.keymap.Up),
+				ui.Combine("h/l", "property", m.keymap.Left, m.keymap.Right),
 				tabs,
-				ui.WithHelp(m.keymap.ToggleView, "list"),
+				ui.WithHelp(m.keymap.ToggleView, "overview"),
 				filters,
 				m.keymap.Back,
 			},
@@ -35,10 +62,10 @@ func (m Model) Help() ui.Help {
 				append([]key.Binding{
 					ui.WithHelp(m.keymap.Up, "repo up"),
 					ui.WithHelp(m.keymap.Down, "repo down"),
-					ui.WithHelp(m.keymap.Left, "column left"),
-					ui.WithHelp(m.keymap.Right, "column right"),
+					ui.WithHelp(m.keymap.Left, "property left"),
+					ui.WithHelp(m.keymap.Right, "property right"),
 				}, paging...),
-				append(groups, ui.WithHelp(m.keymap.Inspect, "inspect repo"), ui.WithHelp(m.keymap.ToggleView, "list view")),
+				append(groups, ui.WithHelp(m.keymap.Inspect, "inspect repo"), ui.WithHelp(m.keymap.ToggleView, "overview")),
 				{filters, m.keymap.Back},
 			},
 		}
@@ -63,6 +90,11 @@ func (m Model) Help() ui.Help {
 		}
 
 	default:
+		// From a slice of the overview, esc goes back there.
+		back := m.keymap.Back
+		if m.fromOverview {
+			back = ui.WithHelp(m.keymap.Back, "overview")
+		}
 		return ui.Help{
 			Short: []key.Binding{
 				ui.Combine("j/k", "repo", m.keymap.Down, m.keymap.Up),
@@ -70,7 +102,7 @@ func (m Model) Help() ui.Help {
 				tabs,
 				ui.WithHelp(m.keymap.ToggleView, "matrix"),
 				filters,
-				m.keymap.Back,
+				back,
 			},
 			Full: [][]key.Binding{
 				append([]key.Binding{
@@ -78,7 +110,7 @@ func (m Model) Help() ui.Help {
 					ui.WithHelp(m.keymap.Down, "repo down"),
 				}, paging...),
 				append(groups, ui.Combine("l/enter", "inspect repo", m.keymap.Right, m.keymap.Inspect), ui.WithHelp(m.keymap.ToggleView, "matrix view")),
-				{filters, m.keymap.Back},
+				{filters, back},
 			},
 		}
 	}

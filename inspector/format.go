@@ -184,17 +184,7 @@ func timeStyle(t time.Time) lipgloss.Style {
 
 // Ago describes how long before now t was, e.g. "3d ago" or "2y ago".
 func Ago(t time.Time) string {
-	days := int(now().Sub(t).Hours() / 24)
-	switch {
-	case days < 1:
-		return "today"
-	case days < 30:
-		return fmt.Sprintf("%dd ago", days)
-	case days < 365:
-		return fmt.Sprintf("%dmo ago", days/30)
-	default:
-		return fmt.Sprintf("%dy ago", days/365)
-	}
+	return ui.AgoDays(int(now().Sub(t).Hours() / 24))
 }
 
 // VisibilityMark is a coloured dot for a repository: red when archived,

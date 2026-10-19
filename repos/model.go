@@ -7,6 +7,7 @@ import (
 	"gh-reponark/filters"
 	"gh-reponark/github"
 	"gh-reponark/inspector"
+	"gh-reponark/overview"
 	"gh-reponark/repo"
 	"gh-reponark/ui"
 
@@ -26,6 +27,10 @@ const (
 	// matrixView shows every repository against every property in the
 	// active group, for spotting the ones set up differently.
 	matrixView
+	// overviewView shows the owner's profile and the repositories as a
+	// whole: totals, breakdowns and every property of the active group
+	// aggregated across them.
+	overviewView
 )
 
 type Model struct {
@@ -43,6 +48,13 @@ type Model struct {
 	pending  [][]string
 	inFlight int
 
+	// The owner's profile for the overview, loaded alongside the
+	// repositories; ownerErr is kept rather than shown as an error screen,
+	// since the repositories are still worth browsing without it.
+	owner       github.Owner
+	ownerLoaded bool
+	ownerErr    error
+
 	keymap    orgKeyMap
 	repoModel inspector.Model
 
@@ -57,6 +69,18 @@ type Model struct {
 	mode         viewMode
 	inspecting   bool // the list view's keys move through properties, not repos
 	columnOffset int
+	// The overview's cards over the visible repositories, built when first
+	// drawn after the filters change, and its cursors: the focused card,
+	// the focused slice of it and the first row of cards in view.
+	cards   []overview.Card
+	card    int
+	slice   int
+	cardRow int
+	// fromOverview is set while the list shows a slice the overview was
+	// filtered to; esc then returns there with overviewFilters, the
+	// filters from before, put back.
+	fromOverview    bool
+	overviewFilters filter.FilterMap
 
 	width  int
 	height int
@@ -105,6 +129,7 @@ func (m *Model) resizeCursors() {
 // current filters and selects the first of them.
 func (m *Model) applyFilters() {
 	m.visible = m.filters.FilterRepos(m.repos)
+	m.cards = nil
 	m.list, m.matrix = ui.Cursor{}, ui.Cursor{}
 	m.resizeCursors()
 	m.selectionChanged()
@@ -135,14 +160,18 @@ func (m *Model) selectionChanged() {
 
 // pageSize is how many rows the current view shows at once.
 func (m *Model) pageSize() int {
-	if m.mode == matrixView {
+	switch m.mode {
+	case matrixView:
 		return m.matrixRows()
+	case overviewView:
+		return m.overviewLayout().rows * m.overviewLayout().columns
+	default:
+		return m.listRows()
 	}
-	return m.listRows()
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.loadRepositoryPage(""), m.spinner.Tick)
+	return tea.Batch(m.loadRepositoryPage(""), m.loadOwner, m.spinner.Tick)
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -178,8 +207,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds := append([]tea.Cmd{m.progress.SetPercent(m.loadedFraction())}, m.startBatches()...)
 		return m, tea.Batch(cmds...)
 
+	case ownerMsg:
+		m.owner, m.ownerLoaded = github.Owner(msg), true
+		return m, nil
+
+	case ownerErrMsg:
+		m.ownerErr = msg.err
+		return m, nil
+
 	case filters.FiltersMsg:
+		// Filters edited by hand are kept: esc no longer undoes them.
 		m.filters = filter.FilterMap(msg)
+		m.fromOverview = false
 		m.applyFilters()
 		return m, nil
 
@@ -215,12 +254,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	case m.inspecting && key.Matches(msg, m.keymap.Back, m.keymap.Left):
 		m.setInspecting(false)
+	case m.fromOverview && m.mode == listView && key.Matches(msg, m.keymap.Back):
+		m.backToOverview()
 	case key.Matches(msg, m.keymap.Back):
 		return func() tea.Msg {
 			return ui.PreviousMsg{}
 		}
 	case key.Matches(msg, m.keymap.ToggleView):
 		m.toggleView()
+	case m.mode == overviewView:
+		m.handleOverviewKey(msg)
 	case key.Matches(msg, m.keymap.Inspect), listMode && key.Matches(msg, m.keymap.Right):
 		if _, ok := m.selectedRepo(); !ok {
 			// Nothing is loaded or everything is filtered out.
@@ -228,9 +271,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.mode = listView
 		m.setInspecting(true)
-	case !listMode && key.Matches(msg, m.keymap.Left):
+	case m.mode == matrixView && key.Matches(msg, m.keymap.Left):
 		m.repoModel.SelectProperty(m.repoModel.ActiveProperty() - 1)
-	case !listMode && key.Matches(msg, m.keymap.Right):
+	case m.mode == matrixView && key.Matches(msg, m.keymap.Right):
 		m.repoModel.SelectProperty(m.repoModel.ActiveProperty() + 1)
 	case key.Matches(msg, repoKeys.NextTab, repoKeys.PrevTab):
 		repoModel, cmd := m.repoModel.Update(msg)
@@ -246,6 +289,38 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// handleOverviewKey moves around the overview: tab from card to card, as
+// it moves between groups elsewhere, j/k through the focused card's
+// slices, h/l to the card either side, and enter to the list filtered to
+// the focused slice.
+func (m *Model) handleOverviewKey(msg tea.KeyPressMsg) {
+	repoKeys := m.repoModel.Keys()
+	switch {
+	case key.Matches(msg, m.keymap.Inspect):
+		m.filterToSlice()
+	case key.Matches(msg, repoKeys.NextTab):
+		m.cycleCard(1)
+	case key.Matches(msg, repoKeys.PrevTab):
+		m.cycleCard(-1)
+	case key.Matches(msg, m.keymap.Down):
+		m.moveSlice(1)
+	case key.Matches(msg, m.keymap.Up):
+		m.moveSlice(-1)
+	case key.Matches(msg, m.keymap.Left):
+		m.moveCard(-1)
+	case key.Matches(msg, m.keymap.Right):
+		m.moveCard(1)
+	case key.Matches(msg, m.keymap.PageUp):
+		m.moveCard(-m.pageSize())
+	case key.Matches(msg, m.keymap.PageDown):
+		m.moveCard(m.pageSize())
+	case key.Matches(msg, m.keymap.Top):
+		m.moveCard(-len(m.overviewCards()))
+	case key.Matches(msg, m.keymap.Bottom):
+		m.moveCard(len(m.overviewCards()))
+	}
 }
 
 // movement is how far a vertical movement key moves the focused cursor.
@@ -278,13 +353,23 @@ func (m *Model) setInspecting(inspecting bool) {
 	m.repoModel.SetFocused(inspecting)
 }
 
+// toggleView moves to the next view: the list, the matrix, the overview
+// and round again. All three share the selected repository and property.
+// Leaving the list this way keeps a slice's filters, so esc no longer
+// undoes them.
 func (m *Model) toggleView() {
 	m.setInspecting(false)
-	if m.mode == listView {
-		m.mode = matrixView
-	} else {
-		m.mode = listView
-	}
+	m.fromOverview = false
+	m.mode = (m.mode + 1) % 3
+}
+
+// backToOverview leaves a slice the overview was filtered to, putting the
+// filters from before back.
+func (m *Model) backToOverview() {
+	m.filters = m.overviewFilters
+	m.fromOverview, m.overviewFilters = false, nil
+	m.applyFilters()
+	m.mode = overviewView
 }
 
 func (m *Model) View() tea.View {
@@ -293,13 +378,21 @@ func (m *Model) View() tea.View {
 	}
 
 	if len(m.visible) == 0 {
+		if len(m.filters) > 0 {
+			return tea.NewView(ui.DimStyle.Render(fmt.Sprintf("No repositories match the %d %s · f to change them",
+				len(m.filters), ui.Plural(len(m.filters), "filter", "filters"))))
+		}
 		return tea.NewView(ui.DimStyle.Render("No repositories found"))
 	}
 
-	if m.mode == matrixView {
+	switch m.mode {
+	case matrixView:
 		return tea.NewView(m.matrixView())
+	case overviewView:
+		return tea.NewView(m.overviewView())
+	default:
+		return tea.NewView(m.listView())
 	}
-	return tea.NewView(m.listView())
 }
 
 // Breadcrumb names the organization or user whose repositories are shown.

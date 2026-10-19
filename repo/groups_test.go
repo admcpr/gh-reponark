@@ -9,7 +9,7 @@ import (
 func TestGroups(t *testing.T) {
 	groups := Groups()
 
-	assert.Equal(t, []string{"Overview", "Status", "Metrics", "Features", "Merge", "Permissions", "Security"}, GroupTitles())
+	assert.Equal(t, []string{"Overview", "Status", "Metrics", "Features", "Merge", "Permissions", "Security", "Branch rules"}, GroupTitles())
 	assert.Equal(t, NewRepoConfig(Repository{}).GroupKeys, keysOf(groups), "same order as a repository's groups")
 
 	total := 0
