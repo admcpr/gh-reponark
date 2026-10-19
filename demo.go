@@ -74,6 +74,58 @@ func demoService() *githubtest.Fake {
 		},
 		Repositories: demoRepositories(),
 		PageSize:     15,
+		Owners: []github.Owner{
+			{
+				Login:              "demo",
+				Name:               "Demo Account",
+				Description:        "Builds terminal tools and the occasional chess engine. Opinions are my own.",
+				Url:                "https://github.com/demo",
+				WebsiteUrl:         "https://demo.example.com",
+				Location:           "Bristol, UK",
+				Company:            "@acme-robotics",
+				TwitterUsername:    "demo",
+				IsUser:             true,
+				HasSponsorsListing: true,
+				CreatedAt:          time.Date(2014, 6, 12, 9, 30, 0, 0, time.UTC),
+				Members:            318,
+				Following:          42,
+				Pinned:             []string{"aurora", "zephyr-router", "dune"},
+			},
+			{
+				Login:                       "acme-robotics",
+				Name:                        "Acme Robotics",
+				Description:                 "Industrial automation, fleet telemetry and the firmware that keeps it all moving.",
+				Url:                         "https://github.com/acme-robotics",
+				WebsiteUrl:                  "https://acme-robotics.example.com",
+				Location:                    "Rotterdam",
+				Email:                       "opensource@acme-robotics.example.com",
+				IsVerified:                  true,
+				ViewerIsAMember:             true,
+				ViewerCanAdminister:         true,
+				ViewerCanCreateRepositories: true,
+				ViewerCanCreateTeams:        true,
+				ViewerCanCreateProjects:     true,
+				CreatedAt:                   time.Date(2016, 2, 3, 0, 0, 0, 0, time.UTC),
+				Members:                     148,
+				Teams:                       12,
+				Pinned:                      []string{"aurora", "beacon"},
+			},
+			{
+				Login:                       "nightshade-labs",
+				Name:                        "Nightshade Labs",
+				Description:                 "Open research in distributed systems, storage engines and query planning. We publish everything we can.",
+				Url:                         "https://github.com/nightshade-labs",
+				WebsiteUrl:                  "https://nightshade.example.org",
+				TwitterUsername:             "nightshadelabs",
+				IsVerified:                  true,
+				ViewerIsAMember:             true,
+				ViewerCanCreateRepositories: true,
+				HasSponsorsListing:          true,
+				CreatedAt:                   time.Date(2012, 11, 20, 0, 0, 0, 0, time.UTC),
+				Members:                     3906,
+				Teams:                       87,
+			},
+		},
 	}
 }
 
@@ -233,10 +285,73 @@ func demoRepositories() []repo.Repository {
 		r.VulnerabilityAlerts.TotalCount = s.alerts
 		r.BranchProtectionRuleCount.TotalCount = i % 3
 		r.Rulesets.TotalCount = (i + 1) % 2
+		demoBranchRules(&r, i)
 		if s.name == "legacy-billing" {
 			r.LockReason = "BILLING"
 		}
 		repos = append(repos, r)
 	}
 	return repos
+}
+
+// demoBranchRules gives repository i rules on its default branch to match
+// its counts: classic protection when it has branch protection rules, and
+// a repository ruleset when it has rulesets, each set up a little
+// differently, plus the odd ruleset in evaluate mode.
+func demoBranchRules(r *repo.Repository, i int) {
+	ref := &r.DefaultBranchRef
+	if r.BranchProtectionRuleCount.TotalCount > 0 {
+		classic := repo.ClassicRule{
+			Pattern:               ref.Name,
+			AllowsDeletions:       i%5 == 0,
+			AllowsForcePushes:     i%7 == 0,
+			RequiresLinearHistory: i%6 == 0,
+			RequiresSignatures:    i%9 == 0,
+		}
+		if i%4 != 3 {
+			approvals := i % 3
+			classic.RequiredApprovingReviewCount = &approvals
+		}
+		if i%2 == 0 {
+			classic.RequiredStatusCheckContexts = []string{"build", "test"}
+		}
+		ref.Classic = classic
+	}
+	if r.Rulesets.TotalCount > 0 {
+		add := func(ruleType string) *repo.BranchRule {
+			var rule repo.BranchRule
+			rule.Type = ruleType
+			rule.Ruleset.Name = "default-branch"
+			rule.Ruleset.Source.Typename = "Repository"
+			ref.Rules.Nodes = append(ref.Rules.Nodes, rule)
+			return &ref.Rules.Nodes[len(ref.Rules.Nodes)-1]
+		}
+		add("PULL_REQUEST").Parameters.PullRequest.RequiredApprovingReviewCount = 1 + i%2
+		add("NON_FAST_FORWARD")
+		add("DELETION")
+		for _, extra := range []struct {
+			every, at int
+			ruleType  string
+		}{
+			{4, 0, "COPILOT_CODE_REVIEW"}, {5, 1, "CODE_SCANNING"}, {6, 1, "SECRET_SCANNING"},
+			{7, 3, "REQUIRED_DEPLOYMENTS"}, {8, 5, "CODE_QUALITY"}, {9, 2, "CODE_COVERAGE"},
+			{11, 4, "LICENSE_COMPLIANCE_SCANNING"}, {12, 0, "REQUIRED_SIGNATURES"},
+			{10, 7, "COMMIT_MESSAGE_PATTERN"}, {13, 9, "MAX_FILE_SIZE"},
+		} {
+			if i%extra.every == extra.at {
+				add(extra.ruleType)
+			}
+		}
+	}
+	for n := 0; n < r.Rulesets.TotalCount; n++ {
+		r.Rulesets.Nodes = append(r.Rulesets.Nodes, struct {
+			Enforcement string `graphql:"enforcement"`
+		}{"ACTIVE"})
+	}
+	if i%13 == 6 {
+		r.Rulesets.TotalCount++
+		r.Rulesets.Nodes = append(r.Rulesets.Nodes, struct {
+			Enforcement string `graphql:"enforcement"`
+		}{"EVALUATE"})
+	}
 }

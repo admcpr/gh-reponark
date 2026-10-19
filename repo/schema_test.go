@@ -9,9 +9,10 @@ import (
 func TestSchema(t *testing.T) {
 	schema := Schema()
 
-	assert.Len(t, schema, 78)
+	assert.Len(t, schema, 96, "78 from the struct and 18 derived Branch rules")
 	assert.Equal(t, "Id", schema[0].Name, "declaration order should be preserved")
-	assert.Equal(t, "Viewer Has Starred", schema[len(schema)-1].Name)
+	assert.Equal(t, "Viewer Has Starred", schema[77].Name, "the last of the struct's own")
+	assert.Equal(t, "Evaluate Rulesets", schema[len(schema)-1].Name, "the derived Branch rules come last")
 
 	byName := map[string]PropertySchema{}
 	for _, p := range schema {
@@ -67,5 +68,5 @@ func TestRepositoryProperties_Order(t *testing.T) {
 	}
 
 	assert.Equal(t, []string{"Id", "Database ID", "Name", "Name With Owner"}, names)
-	assert.Len(t, properties, 78)
+	assert.Len(t, properties, 96)
 }

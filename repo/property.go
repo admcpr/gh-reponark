@@ -111,6 +111,10 @@ func ToProperties(r Repository) map[string]RepoProperty {
 }
 
 func processField(field reflect.StructField, value reflect.Value) []RepoProperty {
+	// Raw data that other properties are derived from is not a property.
+	if field.Tag.Get("property") == "-" {
+		return nil
+	}
 	var properties []RepoProperty
 
 	name := field.Tag.Get("name")

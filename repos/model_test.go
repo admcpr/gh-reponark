@@ -111,7 +111,7 @@ func drive(m *Model, cmd tea.Cmd) {
 		for _, c := range msg {
 			drive(m, c)
 		}
-	case repositoryPageMsg, repositoryBatchMsg:
+	case repositoryPageMsg, repositoryBatchMsg, ownerMsg, ownerErrMsg:
 		_, next := m.Update(msg)
 		drive(m, next)
 	}
@@ -193,7 +193,8 @@ func TestModel_View_AllFilteredOutShowsEmptyState(t *testing.T) {
 	_, ok := m.selectedRepo()
 	assert.False(t, ok)
 	assert.Empty(t, itemNames(m))
-	assert.Contains(t, uitest.Plain(m.View()), "No repositories found")
+	assert.Contains(t, uitest.Plain(m.View()), "No repositories match the 1 filter · f to change them",
+		"the empty state says the filters caused it")
 }
 
 func TestModel_SelectedRepo_NoneBeforeLoad(t *testing.T) {
@@ -378,7 +379,11 @@ func TestModel_Update_ToggleView(t *testing.T) {
 	assert.Equal(t, 1, m.list.Index, "switching views keeps the selection")
 
 	m.Update(tea.KeyPressMsg{Code: 'v', Text: "v"})
-	assert.Equal(t, listView, m.mode)
+	assert.Equal(t, overviewView, m.mode)
+	assert.Equal(t, 1, m.list.Index)
+
+	m.Update(tea.KeyPressMsg{Code: 'v', Text: "v"})
+	assert.Equal(t, listView, m.mode, "the views go round")
 }
 
 func TestModel_Update_EnterInspectsFromMatrix(t *testing.T) {
@@ -540,7 +545,10 @@ func TestModel_Help(t *testing.T) {
 	m.setInspecting(false)
 
 	m.mode = matrixView
-	assert.Equal(t, "hjkl move  enter inspect  tab group  v list  f filters  esc back", m.Help().String())
+	assert.Equal(t, "j/k repo  h/l property  tab group  v overview  f filters  esc back", m.Help().String())
+
+	m.mode = overviewView
+	assert.Equal(t, "tab card  j/k kind  enter show repos  v list  f filters  esc back", m.Help().String())
 }
 
 func TestModel_Help_NothingToBrowse(t *testing.T) {
@@ -555,7 +563,7 @@ func TestModel_Help_NothingToBrowse(t *testing.T) {
 func TestModel_Help_FullListsEveryKey(t *testing.T) {
 	m := newLoadedModel(repo.Repository{Name: "alpha"})
 
-	for _, mode := range []viewMode{listView, matrixView} {
+	for _, mode := range []viewMode{listView, matrixView, overviewView} {
 		m.mode = mode
 		var keys []string
 		for _, column := range m.Help().FullHelp() {

@@ -2,16 +2,19 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"gh-reponark/accounts"
 	"gh-reponark/filter"
 	"gh-reponark/filters"
 	"gh-reponark/github"
 	"gh-reponark/github/githubtest"
+	"gh-reponark/overview"
 	"gh-reponark/repos"
 	"gh-reponark/ui"
 	"gh-reponark/ui/uitest"
@@ -20,6 +23,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // plainModel is a model that provides neither a title nor help so the
@@ -434,18 +438,112 @@ func TestMainModel_OpeningAScreenHidesFullHelp(t *testing.T) {
 	assert.False(t, m.fullHelp)
 }
 
+// loadedRepos is the repos screen over the demo data, loaded: its commands
+// are run and their messages fed back, abandoning any that wait, such as
+// spinner ticks and progress frames.
+func loadedRepos(t *testing.T) *repos.Model {
+	t.Helper()
+	m := repos.NewModel(demoService(), ui.OrgKey{Name: "demo", IsUser: true}, 78, 20)
+	var run func(cmd tea.Cmd, depth int)
+	run = func(cmd tea.Cmd, depth int) {
+		if cmd == nil || depth > 50 {
+			return
+		}
+		done := make(chan tea.Msg, 1)
+		go func() { done <- cmd() }()
+		select {
+		case msg := <-done:
+			if batch, ok := msg.(tea.BatchMsg); ok {
+				for _, c := range batch {
+					run(c, depth+1)
+				}
+				return
+			}
+			if msg != nil {
+				_, next := m.Update(msg)
+				run(next, depth+1)
+			}
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	run(m.Init(), 0)
+	require.Contains(t, m.Status(), "40 repos")
+	return m
+}
+
 func TestRenderFooter_FitsEightyColumns(t *testing.T) {
 	m := MainModel{width: 80, nav: NewNavigator()}
-	loaded := repos.NewModel(&githubtest.Fake{}, ui.OrgKey{Name: "demo"}, 78, 20)
-	m.nav.Push(loaded)
+	loading := repos.NewModel(&githubtest.Fake{}, ui.OrgKey{Name: "demo"}, 78, 20)
+	loaded := loadedRepos(t)
+	picker := accounts.NewModel(demoService(), 78, 20)
+	picker.SetUser(demoService().User)
 
-	for _, full := range []bool{false, true} {
-		m.fullHelp = full
-		footer := ansi.Strip(m.renderFooter(loaded))
-		for _, line := range strings.Split(footer, "\n") {
-			assert.LessOrEqual(t, lipgloss.Width(line), 80, "%q", line)
+	// Every view's help, reached the way a user would.
+	screens := map[string]func() tea.Model{
+		"accounts": func() tea.Model { return picker },
+		"loading":  func() tea.Model { return loading },
+		"filters":  func() tea.Model { return filters.NewModel(nil, nil, 78, 20) },
+		"list":     func() tea.Model { return loaded },
+	}
+	views := []struct {
+		name string
+		keys []tea.KeyPressMsg
+	}{
+		{"inspector", []tea.KeyPressMsg{{Code: tea.KeyEnter}}},
+		{"matrix", []tea.KeyPressMsg{{Code: tea.KeyEscape}, keyPress("v")}},
+		{"overview", []tea.KeyPressMsg{keyPress("v")}},
+		{"list from overview", []tea.KeyPressMsg{{Code: tea.KeyEnter}}},
+	}
+
+	check := func(name string, screen tea.Model) {
+		for _, full := range []bool{false, true} {
+			m.fullHelp = full
+			footer := ansi.Strip(m.renderFooter(screen))
+			for _, line := range strings.Split(footer, "\n") {
+				assert.LessOrEqual(t, lipgloss.Width(line), 80, "%s: %q", name, line)
+			}
+			assert.NotContains(t, footer, "…", "%s (full %v): nothing is cut off", name, full)
 		}
-		assert.NotContains(t, footer, "…", "nothing is cut off")
+	}
+	for name, screen := range screens {
+		check(name, screen())
+	}
+	for _, v := range views {
+		for _, k := range v.keys {
+			loaded.Update(k)
+		}
+		check(v.name, loaded)
+		if v.name == "overview" {
+			// Each card names its own rows, so the help changes from card to
+			// card; every one must fit.
+			for i := 0; i < len(overview.Cards(nil)); i++ {
+				loaded.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+				check(fmt.Sprintf("overview card %d", i+1), loaded)
+			}
+		}
+	}
+}
+
+func TestRenderFooter_HelpIsConsistent(t *testing.T) {
+	m := MainModel{width: 120, nav: NewNavigator()}
+	loaded := loadedRepos(t)
+	short := func() string { return ansi.Strip(m.renderFooter(loaded)) }
+
+	// Every view names what j/k moves over and lists h/l apart; none lumps
+	// them into "hjkl" or uses a word from the code such as "slice".
+	for _, keys := range [][]tea.KeyPressMsg{
+		nil,
+		{{Code: tea.KeyEnter}},
+		{{Code: tea.KeyEscape}, keyPress("v")},
+		{keyPress("v")},
+	} {
+		for _, k := range keys {
+			loaded.Update(k)
+		}
+		help := short()
+		assert.Contains(t, help, "j/k ", help)
+		assert.NotContains(t, help, "hjkl", help)
+		assert.NotContains(t, help, "slice", help)
 	}
 }
 

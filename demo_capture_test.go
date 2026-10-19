@@ -173,6 +173,20 @@ func TestCapture(t *testing.T) {
 		c.press("l", "l", "l")
 		c.snap("matrix")
 		c.expect("matrix", "Discussions")
+
+		// The overview follows the matrix: the card grid, then a slice of
+		// the Last push card focused, then the last card scrolled into view.
+		c.press("v")
+		c.snap("org")
+		c.expect("org", "REPO MIX")
+		c.press("tab")
+		c.repeat("j", 4)
+		c.snap("org-slice")
+		c.expect("org-slice", "LAST PUSH › 1y+")
+		c.press("G")
+		c.snap("org-last")
+		c.expect("org-last", "OTHER SETTINGS")
+		c.press("g")
 		c.press("v")
 
 		c.press("enter")
@@ -200,6 +214,11 @@ func TestCapture(t *testing.T) {
 		c.repeat("j", 3)
 		c.snap("security")
 		c.expect("security", "Vulnerability Alerts")
+
+		c.group("Branch rules")
+		c.snap("branch-rules")
+		c.expect("branch-rules", "Pull Request Rule")
+		c.expect("branch-rules", "Rule Sources")
 
 		// legacy-billing is archived with open alerts and no license. It is
 		// the seventeenth repository alphabetically.
@@ -255,5 +274,16 @@ func TestCapture(t *testing.T) {
 		s.drive(s.m.Init(), 0)
 		s.press("j")
 		s.snap(small.name)
+	}
+
+	// The overview drops to two columns of cards, then one.
+	for _, small := range [][2]int{{100, 30}, {80, 24}, {60, 16}} {
+		s := &capture{t: t, m: NewMainModel(demoService()), dir: dir, prefix: fmt.Sprintf("%dx%d", small[0], small[1])}
+		s.send(tea.WindowSizeMsg{Width: small[0], Height: small[1]})
+		s.m.View()
+		s.drive(s.m.Init(), 0)
+		s.press("enter", "v", "v")
+		s.snap("org-small")
+		s.expect("org-small", "Demo Account")
 	}
 }

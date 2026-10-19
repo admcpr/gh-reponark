@@ -87,6 +87,15 @@ func NewModel(current filter.FilterMap, repos []repo.RepoConfig, width, height i
 		height:     height,
 	}
 	m.refreshMatches()
+	// Start on the first property with a filter, so the ones applied from
+	// elsewhere, such as the overview, are in view and one key from removal.
+	for i, index := range m.matches {
+		if _, ok := selected[m.properties[index].Name]; ok {
+			m.cursor.Set(i)
+			m.selectionChanged()
+			break
+		}
+	}
 	return m
 }
 

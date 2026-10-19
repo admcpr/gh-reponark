@@ -24,6 +24,20 @@ type repositoryPageMsg github.RepositoryPage
 // repositoryBatchMsg carries the configuration of one batch of repositories.
 type repositoryBatchMsg []repo.Repository
 
+// ownerMsg carries the owner's profile; ownerErrMsg says why it could not
+// be loaded.
+type ownerMsg github.Owner
+type ownerErrMsg struct{ err error }
+
+// loadOwner fetches the profile of the organization or user being browsed.
+func (m *Model) loadOwner() tea.Msg {
+	owner, err := m.svc.GetOwner(m.Title, m.isUser)
+	if err != nil {
+		return ownerErrMsg{err}
+	}
+	return ownerMsg(owner)
+}
+
 // loading reports whether repositories are still arriving.
 func (m *Model) loading() bool { return m.progress.Percent() < 1 }
 

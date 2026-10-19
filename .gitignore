@@ -29,3 +29,5 @@ gh-reponark-demo-*
 
 # Recorded by the release workflow and attached to releases, not committed
 /demo.gif
+/screenshots.gif
+/view-*.png

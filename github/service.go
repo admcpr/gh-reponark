@@ -31,6 +31,10 @@ type Service interface {
 	// owned by owner, in the order requested, using a single request. Callers
 	// should pass at most RepositoryBatchSize names.
 	GetRepositories(owner string, names []string) ([]repo.Repository, error)
+	// GetOwner returns the profile of the organization or user whose
+	// repositories are being browsed: the parts any member of an
+	// organization, or anyone at all for a user, is allowed to see.
+	GetOwner(login string, isUser bool) (Owner, error)
 }
 
 // User is the authenticated GitHub user.
@@ -85,4 +89,44 @@ type RepositoryPage struct {
 	// EndCursor is passed as after to fetch the next page.
 	EndCursor   string
 	HasNextPage bool
+}
+
+// Owner is the profile of a repository owner, an organization or a user, as
+// seen by someone who merely belongs to it. Nothing here needs the signed-in
+// user to be an owner or admin, so it loads for every account on the picker.
+type Owner struct {
+	Login string
+	// Name is the display name, which may be empty.
+	Name string
+	// Description is an organization's description or a user's bio.
+	Description     string
+	Url             string
+	WebsiteUrl      string
+	Location        string
+	Email           string
+	TwitterUsername string
+	// Company is only set for users: the one on their profile.
+	Company string
+	// IsUser says whether the owner is a user rather than an organization.
+	IsUser bool
+	// IsVerified is true when GitHub has verified the organization's domains.
+	IsVerified bool
+	// ViewerIsAMember says whether the signed-in user belongs to the
+	// organization, and ViewerCanAdminister whether they own it.
+	ViewerIsAMember     bool
+	ViewerCanAdminister bool
+	// What the signed-in user may create in the organization.
+	ViewerCanCreateRepositories bool
+	ViewerCanCreateTeams        bool
+	ViewerCanCreateProjects     bool
+	// HasSponsorsListing is true when the owner can be sponsored.
+	HasSponsorsListing bool
+	CreatedAt          time.Time
+	// Members counts an organization's members or a user's followers;
+	// Following and Teams only apply to one kind of owner each.
+	Members   int
+	Following int
+	Teams     int
+	// Pinned names the repositories pinned to the profile, in order.
+	Pinned []string
 }

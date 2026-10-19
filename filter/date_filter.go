@@ -7,7 +7,8 @@ import (
 )
 
 // DateFilter matches dates between From and To inclusive. A zero From or To
-// leaves that end of the range open.
+// leaves that end of the range open. An unset date only matches a filter
+// open at both ends: it is neither before nor after anything.
 type DateFilter struct {
 	name string
 	From time.Time
@@ -28,6 +29,9 @@ func (f DateFilter) Matches(property repo.RepoProperty) bool {
 	}
 
 	date := property.Value.(time.Time)
+	if date.IsZero() {
+		return f.From.IsZero() && f.To.IsZero()
+	}
 
 	afterFrom := f.From.IsZero() || !date.Before(f.From)
 	beforeTo := f.To.IsZero() || !date.After(f.To)

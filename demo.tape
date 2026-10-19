@@ -53,10 +53,18 @@ Right Sleep 400ms
 Right Sleep 400ms
 Down Sleep 300ms
 Down Sleep 1.2s
-Type "v"
-Sleep 800ms
 
-# Filter down to the archived repositories.
+# The overview: the whole account as cards. Tab across them and step
+# through a card's slices; the repos behind each slice are listed underneath.
+Type "v"
+Sleep 2s
+Tab Sleep 600ms
+Down Sleep 500ms
+Down Sleep 500ms
+Down Sleep 900ms
+Tab Sleep 900ms
+
+# Filter down to the archived repositories; the overview's cards follow.
 Type "f"
 Sleep 1.2s
 Type "/"

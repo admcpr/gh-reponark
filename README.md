@@ -9,8 +9,9 @@
 Some of the almost limitless fun you can have:
 
 - **Pick an account.** You, or any organisation you belong to.
-- **Browse the repositories** with a details pane, stats measured against the rest of the organisation, and seven groups of settings — Overview, Status, Metrics, Features, Merge, Permissions and Security.
+- **Browse the repositories** with a details pane, stats measured against the rest of the organisation, and eight groups of settings — Overview, Status, Metrics, Features, Merge, Permissions, Security and Branch rules.
 - **Switch to the matrix** to see every repository against one group of settings as a grid.
+- **Switch to the overview** for the account as a whole: a grid of cards charting the repositories by kind, last push, language, license, security settings, open alerts, branch rules, merge styles and features, plus the other settings most repositories share and the ones set differently. Press enter on any slice of a card to list exactly those repositories, and esc to go back.
 - **Filter** on any property with live match counts and a distribution of the values across your repositories, then go back to the list with only the matches showing.
 
 ## Why should I care?
@@ -26,6 +27,40 @@ You probably shouldn't but if you look after more than a handful of repositories
 GitHub answers each of these one repository at a time `gh reponark` answers them for the whole organisation.
 
 This is an audit tool, it's read-only and will never update any settings. 
+
+## The views
+
+All of these are taken against the built-in sample data, so you can see the same thing with `gh reponark --demo`.
+
+### Accounts
+
+You first, then every organisation you belong to, with how many repositories, members and followers each has and whether you're an admin.
+
+![The account picker listing the signed-in user and four organisations](https://github.com/admcpr/gh-reponark/releases/latest/download/view-accounts.png)
+
+### Repositories
+
+Every repository down the left. On the right, the selected one's details, how its stars, forks, issues and pull requests compare with the rest, and its settings, one group at a time. Press `tab` to change group and `enter` to move into the settings.
+
+![The repository list beside the details of one repository, showing its Security settings](https://github.com/admcpr/gh-reponark/releases/latest/download/view-list.png)
+
+### Matrix
+
+Press `v` for every repository against every setting in one group, with a count under each toggle of how many have it on. Here it's the Branch rules group: what applies to each repository's default branch, from rulesets or classic branch protection.
+
+![The matrix of repositories against the Branch rules settings](https://github.com/admcpr/gh-reponark/releases/latest/download/view-matrix.png)
+
+### Overview
+
+Press `v` again for the whole account as cards: what kinds of repositories there are, when they were last pushed, languages, licenses, security settings, open alerts, branch rules and where they come from, merge styles, features, and the other settings most repositories share. Move between cards with `tab`, step through a card's rows with `j` and `k`, and the repositories behind the current row are listed underneath. `enter` lists just those repositories, and `esc` comes back.
+
+![The overview: a grid of chart cards about the account's repositories](https://github.com/admcpr/gh-reponark/releases/latest/download/view-overview.png)
+
+### Filters
+
+Press `f` to filter on any setting. Each one shows how its values are spread across your repositories and which repositories match, and the count updates as you go.
+
+![The filters screen with Is Archived set to no, showing 36 of 40 repositories match](https://github.com/admcpr/gh-reponark/releases/latest/download/view-filters.png)
 
 ## What's a nark?
 
@@ -64,7 +99,7 @@ CAPTURE_DIR=captures go test -tags capture -run TestCapture ./...
 ```
 This writes `<width>x<height>-<screen>.ans` (with colour) and `.txt` files you can diff or render.
 
-The demo recording at the top of this file is made from `demo.tape` with [VHS](https://github.com/charmbracelet/vhs) by the release workflow and attached to each release (nothing is committed); run the "Demo" workflow by hand to re-record it for the latest release. Locally: put a `gh` shim that runs the built binary on the PATH and run `vhs demo.tape`.
+The demo recording at the top of this file and the screenshot of each view are made from `demo.tape` and `screenshots.tape` with [VHS](https://github.com/charmbracelet/vhs) by the release workflow and attached to each release (nothing is committed); run the "Demo" workflow by hand to re-record them for the latest release. Locally: put a `gh` shim that runs the built binary on the PATH and run `vhs demo.tape` or `vhs screenshots.tape`.
 
 Merging to `main` publishes a release: the version bumps the patch number unless the merge commit says `#minor` / `feat:` or `#major` / `feat!:`; `[skip release]` skips it.
 
