@@ -14,6 +14,11 @@ Set Padding 12
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 0ms
 
+# VHS writes a screenshot from the next frame it records, and records none
+# while hidden, so every Screenshot is followed by a pause while the view is
+# still showing. Without it a slow runner saves the next view instead, and
+# the last screenshot is never written.
+
 # ttyd does not advertise truecolour; without this the palette is downsampled.
 Env COLORTERM "truecolor"
 
@@ -26,6 +31,7 @@ Show
 # The account picker: the signed-in user and their organisations.
 Sleep 500ms
 Screenshot view-accounts.png
+Sleep 500ms
 
 # The repository list beside the inspector for aurora, the third repo, on
 # the Security group.
@@ -38,6 +44,7 @@ Sleep 500ms
 Show
 Sleep 300ms
 Screenshot view-list.png
+Sleep 500ms
 
 # The matrix on the Branch rules group, the next one along: every repo
 # against every rule.
@@ -48,6 +55,7 @@ Sleep 500ms
 Show
 Sleep 300ms
 Screenshot view-matrix.png
+Sleep 500ms
 
 # The overview: the account as a grid of cards, with the repos behind the
 # focused slice listed underneath.
@@ -57,6 +65,7 @@ Sleep 500ms
 Show
 Sleep 300ms
 Screenshot view-overview.png
+Sleep 500ms
 
 # The filters screen, on the Is Archived toggle with its chart.
 Hide
@@ -70,3 +79,4 @@ Sleep 500ms
 Show
 Sleep 300ms
 Screenshot view-filters.png
+Sleep 500ms

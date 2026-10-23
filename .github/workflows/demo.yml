@@ -75,4 +75,9 @@ jobs:
           path: screenshots.tape
       - name: Attach to the release
         run: |
-          gh release upload "${{ steps.release.outputs.tag }}" demo.gif view-*.png --clobber --repo "$GITHUB_REPOSITORY"
+          # Every image the README shows must exist, or the README breaks.
+          files="demo.gif view-accounts.png view-list.png view-matrix.png view-overview.png view-filters.png"
+          for f in $files; do
+            [ -s "$f" ] || { echo "::error::$f was not recorded"; exit 1; }
+          done
+          gh release upload "${{ steps.release.outputs.tag }}" $files --clobber --repo "$GITHUB_REPOSITORY"
